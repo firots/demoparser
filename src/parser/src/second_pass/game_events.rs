@@ -69,7 +69,10 @@ pub enum GameEventInfo {
     WeaponCreateDefIdx((Variant, i32, u32)),
     WeaponPurchaseCount((Variant, i32, u32)),
     WeaponCreateDefIdxNew((Variant, i32, u32)),
-    PlayerConnect(i32)
+    PlayerConnect(i32),
+    // (m_hPlayer handle value, ping entity id, prop id) — fires when a
+    // CPlayerPing entity gets its owner set, i.e. once per placed ping.
+    PlayerPingCreated((Variant, i32, u32)),
 }
 
 static ENTITIES_FIRST_EVENTS: &'static [&str] = &["inferno_startburn", "decoy_started", "inferno_expire"];
@@ -518,6 +521,12 @@ impl<'a> SecondPassParser<'a> {
             _ => false,
         })
     }
+    fn contains_ping_create(events: &[GameEventInfo]) -> bool {
+        events.iter().any(|s| match s {
+            &GameEventInfo::PlayerPingCreated(_) => true,
+            _ => false,
+        })
+    }
     pub fn emit_events(&mut self, events: Vec<GameEventInfo>) -> Result<(), DemoParserError> {
         self.handle_player_connect(&events)?;
         if SecondPassParser::contains_round_end_event(&events) {
@@ -532,6 +541,9 @@ impl<'a> SecondPassParser<'a> {
         }
         if SecondPassParser::contains_weapon_create(&events) {
             self.create_custom_event_weapon_purchase(&events);
+        }
+        if SecondPassParser::contains_ping_create(&events) {
+            self.create_custom_event_player_ping(&events);
         }
         self.create_custom_event_weapon_sold(&events);
         Ok(())
@@ -830,6 +842,103 @@ impl<'a> SecondPassParser<'a> {
                         self.game_events.push(ge);
                         self.game_events_counter.insert("item_purchase".to_string());
                     }
+        }
+    }
+    /// Read one world coordinate of a CPlayerPing entity (cell + offset pair).
+    fn ping_coord(&self, entity_id: &i32, cell_id: Option<u32>, vec_id: Option<u32>) -> Option<f32> {
+        const CELL_BITS: i32 = 9;
+        const MAX_COORD: f32 = (1 << 14) as f32;
+        let cell = match self.get_prop_from_ent(&cell_id?, entity_id) {
+            Ok(Variant::U32(c)) => c as f32,
+            _ => return None,
+        };
+        let offset = match self.get_prop_from_ent(&vec_id?, entity_id) {
+            Ok(Variant::F32(o)) => o,
+            _ => return None,
+        };
+        Some((cell * (1 << CELL_BITS) as f32) - MAX_COORD + offset)
+    }
+    /// Synthesize a "player_ping" event per placed ping wheel marker.
+    /// CS2 networks pings as CPlayerPing entities (no game event exists);
+    /// creation is detected via the m_hPlayer owner-handle update.
+    fn create_custom_event_player_ping(&mut self, events: &[GameEventInfo]) {
+        self.game_events_counter.insert("player_ping".to_string());
+        if !self.wanted_events.contains(&"player_ping".to_string()) && self.wanted_events.first() != Some(&"all".to_string()) {
+            return;
+        }
+        let ids = self.prop_controller.special_ids.clone();
+        for event in events {
+            let (handle, ping_entid) = match event {
+                GameEventInfo::PlayerPingCreated((Variant::U32(handle), ping_entid, _)) => (*handle, *ping_entid),
+                _ => continue,
+            };
+            let pawn_entid = (handle & 0x7ff) as i32;
+            if pawn_entid == ENTITYIDNONE {
+                continue;
+            }
+            let player = match self.find_player_metadata(pawn_entid) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+            let mut fields = vec![];
+            fields.push(EventField {
+                data: Some(Variant::U64(player.steamid.unwrap_or(0))),
+                name: "user_steamid".to_string(),
+            });
+            fields.push(EventField {
+                data: self.create_name(player).ok(),
+                name: "user_name".to_string(),
+            });
+            fields.push(EventField {
+                data: self.ping_coord(&ping_entid, ids.ping_cell_x, ids.ping_vec_x).map(Variant::F32),
+                name: "x".to_string(),
+            });
+            fields.push(EventField {
+                data: self.ping_coord(&ping_entid, ids.ping_cell_y, ids.ping_vec_y).map(Variant::F32),
+                name: "y".to_string(),
+            });
+            fields.push(EventField {
+                data: self.ping_coord(&ping_entid, ids.ping_cell_z, ids.ping_vec_z).map(Variant::F32),
+                name: "z".to_string(),
+            });
+            fields.push(EventField {
+                data: ids.ping_urgent.and_then(|id| self.get_prop_from_ent(&id, &ping_entid).ok()),
+                name: "urgent".to_string(),
+            });
+            fields.push(EventField {
+                data: ids.ping_type.and_then(|id| self.get_prop_from_ent(&id, &ping_entid).ok()),
+                name: "ping_type".to_string(),
+            });
+            fields.push(EventField {
+                data: ids.ping_place_name.and_then(|id| self.get_prop_from_ent(&id, &ping_entid).ok()),
+                name: "place_name".to_string(),
+            });
+            // Raw masked handle of the pinged entity (2047 = none) — lets
+            // consumers distinguish world pings from entity pings.
+            let pinged_entid = ids.ping_pinged_entity.and_then(|id| match self.get_prop_from_ent(&id, &ping_entid) {
+                Ok(Variant::U32(h)) => Some(Variant::I32((h & 0x7ff) as i32)),
+                _ => None,
+            });
+            fields.push(EventField {
+                data: pinged_entid,
+                name: "pinged_entityid".to_string(),
+            });
+            fields.push(EventField {
+                data: Some(Variant::I32(ping_entid)),
+                name: "entityid".to_string(),
+            });
+            fields.push(EventField {
+                data: Some(Variant::I32(self.tick)),
+                name: "tick".to_string(),
+            });
+            fields.extend(self.find_extra_props_events(pawn_entid, "user"));
+            fields.extend(self.find_non_player_props());
+            let ge = GameEvent {
+                name: "player_ping".to_string(),
+                fields,
+                tick: self.tick,
+            };
+            self.game_events.push(ge);
         }
     }
     fn extract_win_reason(&self, events: &[GameEventInfo]) -> Option<Variant> {
@@ -1437,6 +1546,16 @@ impl<'a> SecondPassParser<'a> {
                 return events;
             }
 
+            // player ping placed (CPlayerPing.m_hPlayer set on the new ping entity)
+            if let Some(id) = prop_controller.special_ids.ping_h_player {
+                if fi.prop_id == id {
+                    events.push(GameEventInfo::PlayerPingCreated((
+                        result.clone(),
+                        entity.entity_id,
+                        fi.prop_id,
+                    )));
+                }
+            }
             // round end
             if let Some(id) = prop_controller.special_ids.round_end_count {
                 if fi.prop_id == id {

@@ -282,6 +282,20 @@ pub struct SpecialIDs {
 
     pub is_airborn: Option<u32>,
     pub initial_velocity: Option<u32>,
+
+    // CPlayerPing entity props (in-game ping wheel markers). Used to
+    // synthesize "player_ping" custom events on ping-entity creation.
+    pub ping_h_player: Option<u32>,
+    pub ping_pinged_entity: Option<u32>,
+    pub ping_type: Option<u32>,
+    pub ping_urgent: Option<u32>,
+    pub ping_place_name: Option<u32>,
+    pub ping_cell_x: Option<u32>,
+    pub ping_cell_y: Option<u32>,
+    pub ping_cell_z: Option<u32>,
+    pub ping_vec_x: Option<u32>,
+    pub ping_vec_y: Option<u32>,
+    pub ping_vec_z: Option<u32>,
 }
 impl SpecialIDs {
     pub fn new() -> Self {
@@ -331,6 +345,17 @@ impl SpecialIDs {
             custom_name: None,
             is_airborn: None,
             initial_velocity: None,
+            ping_h_player: None,
+            ping_pinged_entity: None,
+            ping_type: None,
+            ping_urgent: None,
+            ping_place_name: None,
+            ping_cell_x: None,
+            ping_cell_y: None,
+            ping_cell_z: None,
+            ping_vec_x: None,
+            ping_vec_y: None,
+            ping_vec_z: None,
         }
     }
 }
