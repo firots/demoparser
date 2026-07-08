@@ -784,6 +784,14 @@ impl<'a> SecondPassParser<'a> {
 
     fn insert_equipment_id_bitmask(&self, bitmask: &mut u64, res: Variant, player_entid: &i32) {
         if let Variant::U32(def_idx) = res {
+            // A u64 bitmask can only represent def indexes 0-63. Higher defs
+            // (custom knife skins, def 500-523) would overflow the shift:
+            // panic in debug builds, silently set bit def_idx % 64 in release
+            // (defs 512+ alias real weapon bits 0-11). Knives carry no belt
+            // information — skip them.
+            if def_idx >= 64 {
+                return;
+            }
             match WEAPINDICIES.get(&def_idx) {
                 None => return,
                 Some(weap_name) => {
