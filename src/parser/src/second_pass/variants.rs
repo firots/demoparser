@@ -24,6 +24,49 @@ pub enum Variant {
     Stickers(Vec<Sticker>),
     InputHistory(Vec<InputHistory>),
 }
+
+impl Variant {
+    /// Bytes owned behind the variant's inline representation. Callers use
+    /// checked accounting before retaining attacker-influenced nested values.
+    pub(crate) fn retained_heap_bytes(&self) -> Option<usize> {
+        match self {
+            Variant::String(value) => Some(value.capacity()),
+            Variant::StringVec(values) => values.iter().try_fold(
+                values.capacity().checked_mul(std::mem::size_of::<String>())?,
+                |total, value| total.checked_add(value.capacity()),
+            ),
+            Variant::U32Vec(values) => {
+                values.capacity().checked_mul(std::mem::size_of::<u32>())
+            }
+            Variant::U64Vec(values) => {
+                values.capacity().checked_mul(std::mem::size_of::<u64>())
+            }
+            Variant::Stickers(values) => values.iter().try_fold(
+                values.capacity().checked_mul(std::mem::size_of::<Sticker>())?,
+                |total, sticker| total.checked_add(sticker.name.capacity()),
+            ),
+            Variant::InputHistory(values) => values
+                .capacity()
+                .checked_mul(std::mem::size_of::<InputHistory>()),
+            _ => Some(0),
+        }
+    }
+
+    /// Approximate the complete per-row retention for heap-backed variants,
+    /// including the outer column element plus its owned allocations.
+    pub(crate) fn retained_column_bytes(&self) -> Option<usize> {
+        match self {
+            Variant::String(_)
+            | Variant::StringVec(_)
+            | Variant::U32Vec(_)
+            | Variant::U64Vec(_)
+            | Variant::Stickers(_)
+            | Variant::InputHistory(_) => std::mem::size_of::<Variant>()
+                .checked_add(self.retained_heap_bytes()?),
+            _ => Some(0),
+        }
+    }
+}
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Sticker {
     pub name: String,
@@ -791,5 +834,34 @@ impl Serialize for OutputSerdeHelperStruct {
             }
         }
         map.end()
+    }
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+
+    #[test]
+    fn retained_heap_accounting_includes_nested_allocations() {
+        let strings = Variant::StringVec(vec!["alpha".to_string(), "beta".to_string()]);
+        assert!(
+            strings.retained_heap_bytes().unwrap()
+                >= 2 * std::mem::size_of::<String>() + 9
+        );
+        assert!(strings.retained_column_bytes().unwrap() > strings.retained_heap_bytes().unwrap());
+
+        let history = Variant::InputHistory(vec![InputHistory {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            render_tick_count: 0,
+            render_tick_fraction: 0.0,
+            player_tick_count: 0,
+            player_tick_fraction: 0.0,
+        }]);
+        assert_eq!(
+            history.retained_heap_bytes(),
+            Some(std::mem::size_of::<InputHistory>())
+        );
     }
 }

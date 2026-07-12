@@ -58,14 +58,18 @@ pub enum CoordinateAxis {
 
 impl<'a> SecondPassParser<'a> {
     pub fn collect_entities(&mut self) {
+        let _ = self.collect_entities_checked();
+    }
+
+    pub(crate) fn collect_entities_checked(&mut self) -> Result<(), DemoParserError> {
         if !self.prop_controller.event_with_velocity {
             if !self.wanted_ticks.contains(&self.tick) && self.wanted_ticks.len() != 0 || self.wanted_events.len() != 0 {
-                return;
+                return Ok(());
             }
         }
         if self.parse_projectiles {
-            self.collect_projectiles();
-            return;
+            self.collect_projectiles()?;
+            return Ok(());
         }
         // iterate every player and every wanted prop name
         // if either one is missing then push None to output
@@ -76,27 +80,30 @@ impl<'a> SecondPassParser<'a> {
                 match self.find_prop(&wanted_prop_state_info.base, entity_id, player) {
                     Ok(prop) => {
                         if prop != wanted_prop_state_info.wanted_prop_state {
-                            return;
+                            return Ok(());
                         }
                     }
-                    Err(_e) => return,
+                    Err(_e) => return Ok(()),
                 }
             }
 
+            let player_steamid = match player.steamid {
+                Some(steamid) => steamid,
+                None => 0,
+            };
+            if !self.wanted_players.is_empty() && !self.wanted_players.contains(&player_steamid) {
+                continue;
+            }
+            self.resource_budget.reserve_tick_rows(1)?;
+            if self.order_by_steamid && !self.df_per_player.contains_key(&player_steamid) {
+                self.df_per_player.insert(player_steamid, AHashMap::default());
+            }
+
             for prop_info in &self.prop_controller.prop_infos {
-                let player_steamid = match player.steamid {
-                    Some(steamid) => steamid,
-                    None => 0,
-                };
-                if !self.wanted_players.is_empty() && !self.wanted_players.contains(&player_steamid) {
-                    continue;
-                }
-                if self.order_by_steamid && !self.df_per_player.contains_key(&player_steamid) {
-                    self.df_per_player.insert(player_steamid, AHashMap::default());
-                }
                 if self.order_by_steamid {
                     match self.find_prop(prop_info, entity_id, player) {
                         Ok(prop) => {
+                            self.reserve_nested_output(&prop)?;
                             let df_this_player = self.df_per_player.get_mut(&player.steamid.unwrap_or(0)).unwrap();
                             df_this_player.entry(prop_info.id).or_insert_with(|| PropColumn::new()).push(Some(prop.clone()));
                         }
@@ -108,6 +115,7 @@ impl<'a> SecondPassParser<'a> {
                 } else {
                     match self.find_prop(prop_info, entity_id, player) {
                         Ok(prop) => {
+                            self.reserve_nested_output(&prop)?;
                             self.output.entry(prop_info.id).or_insert_with(|| PropColumn::new()).push(Some(prop));
                         }
                         Err(_e) => {
@@ -118,6 +126,17 @@ impl<'a> SecondPassParser<'a> {
                 }
             }
         }
+        Ok(())
+    }
+
+    fn reserve_nested_output(&self, prop: &Variant) -> Result<(), DemoParserError> {
+        let retained_bytes = prop
+            .retained_column_bytes()
+            .ok_or(DemoParserError::ResourceLimitExceeded(
+                "retained nested tick data size overflow",
+            ))?;
+        self.resource_budget
+            .reserve_retained_nested_bytes(retained_bytes)
     }
 
     pub fn find_prop(&self, prop_info: &PropInfo, entity_id: &i32, player: &PlayerMetaData) -> Result<Variant, PropCollectionError> {
@@ -232,7 +251,7 @@ impl<'a> SecondPassParser<'a> {
         None
     }
 
-    pub fn collect_projectiles(&mut self) {
+    pub fn collect_projectiles(&mut self) -> Result<(), DemoParserError> {
         for projectile_entid in &self.projectiles {
             let grenade_type = match self.find_grenade_type(projectile_entid) {              
                 Some(t) => {if !t.contains("Projectile") && !self.parse_grenades{continue}else{t}},
@@ -246,6 +265,7 @@ impl<'a> SecondPassParser<'a> {
                 Ok(x) => x,
                 _ => continue,
             };
+            self.resource_budget.reserve_tick_rows(1)?;
             // Projectiles are the only ones with coordinates others map to 0.0, map them to None as it is clearer.
             let (x, y, z) = if grenade_type.contains("Project") {
                 let x = self.collect_cell_coordinate_grenade(CoordinateAxis::X, projectile_entid).ok();
@@ -298,6 +318,7 @@ impl<'a> SecondPassParser<'a> {
                 }
             }
         }
+        Ok(())
     }
 
     fn find_weapon_name(&self, entity_id: &i32) -> Result<Variant, PropCollectionError> {
