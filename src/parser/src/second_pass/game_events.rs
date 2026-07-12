@@ -84,7 +84,9 @@ const STEAMID64INDIVIDUALIDENTIFIER: u64 = 0x0110000100000000;
 
 impl<'a> SecondPassParser<'a> {
     fn reserve_game_event(&self) -> Result<(), DemoParserError> {
-        self.resource_budget.reserve_game_events(1)
+        self.resource_budget.reserve_game_events(1)?;
+        self.resource_budget
+            .reserve_retained_message_bytes(std::mem::size_of::<GameEvent>())
     }
 
     fn push_reserved_game_event(&mut self, event: GameEvent) -> Result<(), DemoParserError> {
@@ -126,6 +128,8 @@ impl<'a> SecondPassParser<'a> {
         if REMOVEDEVENTS.contains(&event_desc.name()) {
             return Ok(None);
         }
+        self.resource_budget
+            .reserve_retained_message_bytes(bytes.len())?;
         let mut event_fields: Vec<EventField> = vec![];
 
         // Parsing game events is this easy, the complexity comes from adding "extra" fields into events.

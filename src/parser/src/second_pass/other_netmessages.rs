@@ -22,6 +22,19 @@ impl<'a> SecondPassParser<'a> {
             Ok(msg) => msg,
             Err(_) => return Err(DemoParserError::MalformedMessage),
         };
+        let retained_bytes = drops
+            .entity_updates
+            .len()
+            .checked_mul(std::mem::size_of::<EconItem>())
+            .and_then(|overhead| overhead.checked_add(bytes.len()))
+            .ok_or(DemoParserError::ResourceLimitExceeded(
+                "retained item data size overflow",
+            ))?;
+        self.resource_budget
+            .reserve_retained_message_bytes(retained_bytes)?;
+        self.item_drops
+            .try_reserve(drops.entity_updates.len())
+            .map_err(|_| DemoParserError::VectorResizeFailure)?;
         for item in &drops.entity_updates {
             let item_name = match WEAPINDICIES.get(&item.defindex.unwrap_or(u32::MAX)) {
                 Some(name) => Some(name.to_string()),
@@ -58,6 +71,34 @@ impl<'a> SecondPassParser<'a> {
             Ok(msg) => msg,
             Err(_) => return Err(DemoParserError::MalformedMessage),
         };
+        let item_count = end_data
+            .allplayerdata
+            .iter()
+            .try_fold(0usize, |total, player| total.checked_add(player.items.len()))
+            .ok_or(DemoParserError::ResourceLimitExceeded(
+                "retained player data size overflow",
+            ))?;
+        let retained_bytes = end_data
+            .allplayerdata
+            .len()
+            .checked_mul(std::mem::size_of::<PlayerEndMetaData>())
+            .and_then(|overhead| {
+                item_count
+                    .checked_mul(std::mem::size_of::<EconItem>())
+                    .and_then(|items| overhead.checked_add(items))
+            })
+            .and_then(|overhead| overhead.checked_add(bytes.len()))
+            .ok_or(DemoParserError::ResourceLimitExceeded(
+                "retained player data size overflow",
+            ))?;
+        self.resource_budget
+            .reserve_retained_message_bytes(retained_bytes)?;
+        self.player_end_data
+            .try_reserve(end_data.allplayerdata.len())
+            .map_err(|_| DemoParserError::VectorResizeFailure)?;
+        self.skins
+            .try_reserve(item_count)
+            .map_err(|_| DemoParserError::VectorResizeFailure)?;
         /*
         Todo parse "accolade", seems to be the awards at the end like "most mvps in game"
         But seems to only have integers so need to figure out what they mean

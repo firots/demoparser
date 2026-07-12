@@ -307,6 +307,17 @@ impl<'a> SecondPassParser<'a> {
 
     pub fn parse_voice_data(&mut self, bytes: &[u8]) -> Result<(), DemoParserError> {
         if let Ok(m) = CsvcMsgVoiceData::decode(bytes) {
+            let retained_bytes = bytes
+                .len()
+                .checked_add(std::mem::size_of::<CsvcMsgVoiceData>())
+                .ok_or(DemoParserError::ResourceLimitExceeded(
+                    "retained voice data size overflow",
+                ))?;
+            self.resource_budget
+                .reserve_retained_message_bytes(retained_bytes)?;
+            self.voice_data
+                .try_reserve(1)
+                .map_err(|_| DemoParserError::VectorResizeFailure)?;
             self.voice_data.push((self.tick, m));
         }
         Ok(())
@@ -314,6 +325,9 @@ impl<'a> SecondPassParser<'a> {
     pub fn parse_game_event(&mut self, bytes: &[u8], wrong_order_events: &mut Vec<GameEvent>) -> Result<(), DemoParserError> {
         match self.parse_event(bytes) {
             Ok(Some(event)) => {
+                wrong_order_events
+                    .try_reserve(1)
+                    .map_err(|_| DemoParserError::VectorResizeFailure)?;
                 wrong_order_events.push(event);
                 Ok(())
             }

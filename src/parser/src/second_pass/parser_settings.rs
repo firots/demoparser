@@ -29,26 +29,39 @@ const HUF_LOOKUPTABLE_MAXVALUE: u32 = (1 << 17) - 1;
 const DEFAULT_MAX_ENTITY_ID: usize = 1024;
 pub const MAX_TICK_ROWS: usize = 5_000_000;
 pub const MAX_GAME_EVENTS: usize = 500_000;
+pub const MAX_RETAINED_MESSAGE_BYTES: usize = 256 * 1024 * 1024;
 
 #[derive(Debug)]
 pub(crate) struct ParseResourceBudget {
     tick_rows: AtomicUsize,
     game_events: AtomicUsize,
+    retained_message_bytes: AtomicUsize,
     max_tick_rows: usize,
     max_game_events: usize,
+    max_retained_message_bytes: usize,
 }
 
 impl ParseResourceBudget {
     pub(crate) fn new() -> Self {
-        Self::with_limits(MAX_TICK_ROWS, MAX_GAME_EVENTS)
+        Self::with_limits(
+            MAX_TICK_ROWS,
+            MAX_GAME_EVENTS,
+            MAX_RETAINED_MESSAGE_BYTES,
+        )
     }
 
-    fn with_limits(max_tick_rows: usize, max_game_events: usize) -> Self {
+    fn with_limits(
+        max_tick_rows: usize,
+        max_game_events: usize,
+        max_retained_message_bytes: usize,
+    ) -> Self {
         ParseResourceBudget {
             tick_rows: AtomicUsize::new(0),
             game_events: AtomicUsize::new(0),
+            retained_message_bytes: AtomicUsize::new(0),
             max_tick_rows,
             max_game_events,
+            max_retained_message_bytes,
         }
     }
 
@@ -81,6 +94,15 @@ impl ParseResourceBudget {
             amount,
             self.max_game_events,
             "parsed game events exceed limit",
+        )
+    }
+
+    pub(crate) fn reserve_retained_message_bytes(&self, amount: usize) -> Result<(), DemoParserError> {
+        Self::reserve(
+            &self.retained_message_bytes,
+            amount,
+            self.max_retained_message_bytes,
+            "retained message data exceeds limit",
         )
     }
 }
@@ -306,7 +328,7 @@ mod security_tests {
 
     #[test]
     fn aggregate_resource_budget_rejects_rows_and_events_past_limits() {
-        let budget = ParseResourceBudget::with_limits(2, 1);
+        let budget = ParseResourceBudget::with_limits(2, 1, 4);
 
         assert!(budget.reserve_tick_rows(2).is_ok());
         assert!(matches!(
@@ -318,16 +340,26 @@ mod security_tests {
             budget.reserve_game_events(1),
             Err(DemoParserError::ResourceLimitExceeded(_))
         ));
+        assert!(budget.reserve_retained_message_bytes(4).is_ok());
+        assert!(matches!(
+            budget.reserve_retained_message_bytes(1),
+            Err(DemoParserError::ResourceLimitExceeded(_))
+        ));
     }
 
     #[test]
     fn aggregate_resource_budget_is_shared_across_workers() {
-        let budget = Arc::new(ParseResourceBudget::with_limits(1, 1));
+        let budget = Arc::new(ParseResourceBudget::with_limits(1, 1, 1));
         let other_worker = Arc::clone(&budget);
 
         assert!(budget.reserve_tick_rows(1).is_ok());
         assert!(matches!(
             other_worker.reserve_tick_rows(1),
+            Err(DemoParserError::ResourceLimitExceeded(_))
+        ));
+        assert!(budget.reserve_retained_message_bytes(1).is_ok());
+        assert!(matches!(
+            other_worker.reserve_retained_message_bytes(1),
             Err(DemoParserError::ResourceLimitExceeded(_))
         ));
     }

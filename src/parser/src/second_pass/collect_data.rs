@@ -68,7 +68,7 @@ impl<'a> SecondPassParser<'a> {
             }
         }
         if self.parse_projectiles {
-            self.collect_projectiles();
+            self.collect_projectiles()?;
             return Ok(());
         }
         // iterate every player and every wanted prop name
@@ -239,7 +239,7 @@ impl<'a> SecondPassParser<'a> {
         None
     }
 
-    pub fn collect_projectiles(&mut self) {
+    pub fn collect_projectiles(&mut self) -> Result<(), DemoParserError> {
         for projectile_entid in &self.projectiles {
             let grenade_type = match self.find_grenade_type(projectile_entid) {              
                 Some(t) => {if !t.contains("Projectile") && !self.parse_grenades{continue}else{t}},
@@ -253,6 +253,7 @@ impl<'a> SecondPassParser<'a> {
                 Ok(x) => x,
                 _ => continue,
             };
+            self.resource_budget.reserve_tick_rows(1)?;
             // Projectiles are the only ones with coordinates others map to 0.0, map them to None as it is clearer.
             let (x, y, z) = if grenade_type.contains("Project") {
                 let x = self.collect_cell_coordinate_grenade(CoordinateAxis::X, projectile_entid).ok();
@@ -305,6 +306,7 @@ impl<'a> SecondPassParser<'a> {
                 }
             }
         }
+        Ok(())
     }
 
     fn find_weapon_name(&self, entity_id: &i32) -> Result<Variant, PropCollectionError> {
