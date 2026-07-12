@@ -87,18 +87,19 @@ impl<'a> SecondPassParser<'a> {
                 }
             }
 
+            let player_steamid = match player.steamid {
+                Some(steamid) => steamid,
+                None => 0,
+            };
+            if !self.wanted_players.is_empty() && !self.wanted_players.contains(&player_steamid) {
+                continue;
+            }
+            self.resource_budget.reserve_tick_rows(1)?;
+            if self.order_by_steamid && !self.df_per_player.contains_key(&player_steamid) {
+                self.df_per_player.insert(player_steamid, AHashMap::default());
+            }
+
             for prop_info in &self.prop_controller.prop_infos {
-                let player_steamid = match player.steamid {
-                    Some(steamid) => steamid,
-                    None => 0,
-                };
-                if !self.wanted_players.is_empty() && !self.wanted_players.contains(&player_steamid) {
-                    continue;
-                }
-                self.resource_budget.reserve_tick_rows(1)?;
-                if self.order_by_steamid && !self.df_per_player.contains_key(&player_steamid) {
-                    self.df_per_player.insert(player_steamid, AHashMap::default());
-                }
                 if self.order_by_steamid {
                     match self.find_prop(prop_info, entity_id, player) {
                         Ok(prop) => {
