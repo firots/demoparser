@@ -213,7 +213,7 @@ impl<'a> SecondPassParser<'a> {
                     if should_parse_entities {
                         self.parse_packet_ents(&msg_bytes, is_fullpacket)?;
                         if !is_fullpacket {
-                            self.collect_entities();
+                            self.collect_entities_checked()?;
                         }
                     }
                     Ok(())

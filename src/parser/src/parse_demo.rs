@@ -17,6 +17,7 @@ use itertools::Itertools;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::prelude::ParallelIterator;
 use std::sync::mpsc::{channel, Receiver};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -73,11 +74,18 @@ impl<'a> Parser<'a> {
     }
 
     fn second_pass_multi_threaded(&self, outer_bytes: &[u8], first_pass_output: FirstPassOutput) -> Result<DemoOutput, DemoParserError> {
+        let resource_budget = Arc::new(ParseResourceBudget::new());
         let second_pass_outputs: Vec<Result<SecondPassOutput, DemoParserError>> = first_pass_output
             .fullpacket_offsets
             .par_iter()
             .map(|offset| {
-                let mut parser = SecondPassParser::new(first_pass_output.clone(), *offset, false, None)?;
+                let mut parser = SecondPassParser::new_with_resource_budget(
+                    first_pass_output.clone(),
+                    *offset,
+                    false,
+                    None,
+                    Arc::clone(&resource_budget),
+                )?;
                 parser.start(outer_bytes)?;
                 Ok(parser.create_output())
             })
@@ -139,6 +147,7 @@ impl<'a> Parser<'a> {
         reciever: Receiver<StartEndOffset>,
     ) -> Result<DemoOutput, DemoParserError> {
         thread::scope(|s| {
+            let resource_budget = Arc::new(ParseResourceBudget::new());
             let mut handles = vec![];
             let mut channel_threading_was_ok = true;
             loop {
@@ -152,8 +161,15 @@ impl<'a> Parser<'a> {
                         }
                     }
                     let my_first_out = first_pass_output.clone();
+                    let worker_budget = Arc::clone(&resource_budget);
                     handles.push(s.spawn(move || {
-                        let mut parser = SecondPassParser::new(my_first_out, start_end_offset.start, false, Some(start_end_offset))?;
+                        let mut parser = SecondPassParser::new_with_resource_budget(
+                            my_first_out,
+                            start_end_offset.start,
+                            false,
+                            Some(start_end_offset),
+                            worker_budget,
+                        )?;
                         parser.start(outer_bytes)?;
                         Ok(parser.create_output())
                     }));
@@ -188,11 +204,18 @@ impl<'a> Parser<'a> {
         })
     }
     fn second_pass_multi_threaded_no_channels(&self, outer_bytes: &[u8], first_pass_output: FirstPassOutput) -> Result<DemoOutput, DemoParserError> {
+        let resource_budget = Arc::new(ParseResourceBudget::new());
         let second_pass_outputs: Vec<Result<SecondPassOutput, DemoParserError>> = first_pass_output
             .fullpacket_offsets
             .par_iter()
             .map(|offset| {
-                let mut parser = SecondPassParser::new(first_pass_output.clone(), *offset, false, None)?;
+                let mut parser = SecondPassParser::new_with_resource_budget(
+                    first_pass_output.clone(),
+                    *offset,
+                    false,
+                    None,
+                    Arc::clone(&resource_budget),
+                )?;
                 parser.start(outer_bytes)?;
                 Ok(parser.create_output())
             })

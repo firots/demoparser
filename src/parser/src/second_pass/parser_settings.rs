@@ -23,10 +23,70 @@ use csgoproto::CsvcMsgVoiceData;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::env;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 const HUF_LOOKUPTABLE_MAXVALUE: u32 = (1 << 17) - 1;
 const DEFAULT_MAX_ENTITY_ID: usize = 1024;
+pub const MAX_TICK_ROWS: usize = 5_000_000;
+pub const MAX_GAME_EVENTS: usize = 500_000;
+
+#[derive(Debug)]
+pub(crate) struct ParseResourceBudget {
+    tick_rows: AtomicUsize,
+    game_events: AtomicUsize,
+    max_tick_rows: usize,
+    max_game_events: usize,
+}
+
+impl ParseResourceBudget {
+    pub(crate) fn new() -> Self {
+        Self::with_limits(MAX_TICK_ROWS, MAX_GAME_EVENTS)
+    }
+
+    fn with_limits(max_tick_rows: usize, max_game_events: usize) -> Self {
+        ParseResourceBudget {
+            tick_rows: AtomicUsize::new(0),
+            game_events: AtomicUsize::new(0),
+            max_tick_rows,
+            max_game_events,
+        }
+    }
+
+    fn reserve(
+        counter: &AtomicUsize,
+        amount: usize,
+        limit: usize,
+        message: &'static str,
+    ) -> Result<(), DemoParserError> {
+        counter
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                current.checked_add(amount).filter(|next| *next <= limit)
+            })
+            .map(|_| ())
+            .map_err(|_| DemoParserError::ResourceLimitExceeded(message))
+    }
+
+    pub(crate) fn reserve_tick_rows(&self, amount: usize) -> Result<(), DemoParserError> {
+        Self::reserve(
+            &self.tick_rows,
+            amount,
+            self.max_tick_rows,
+            "parsed tick rows exceed limit",
+        )
+    }
+
+    pub(crate) fn reserve_game_events(&self, amount: usize) -> Result<(), DemoParserError> {
+        Self::reserve(
+            &self.game_events,
+            amount,
+            self.max_game_events,
+            "parsed game events exceed limit",
+        )
+    }
+}
 
 pub struct SecondPassParser<'a> {
+    pub(crate) resource_budget: Arc<ParseResourceBudget>,
     pub start_end_offset: Option<StartEndOffset>,
     pub qf_mapper: &'a QfMapper,
     pub prop_controller: &'a PropController,
@@ -156,6 +216,22 @@ impl<'a> SecondPassParser<'a> {
         parse_all_packets: bool,
         start_end_offset: Option<StartEndOffset>,
     ) -> Result<Self, DemoParserError> {
+        Self::new_with_resource_budget(
+            first_pass_output,
+            offset,
+            parse_all_packets,
+            start_end_offset,
+            Arc::new(ParseResourceBudget::new()),
+        )
+    }
+
+    pub(crate) fn new_with_resource_budget(
+        first_pass_output: FirstPassOutput<'a>,
+        offset: usize,
+        parse_all_packets: bool,
+        start_end_offset: Option<StartEndOffset>,
+        resource_budget: Arc<ParseResourceBudget>,
+    ) -> Result<Self, DemoParserError> {
         first_pass_output
             .settings
             .wanted_player_props
@@ -165,6 +241,7 @@ impl<'a> SecondPassParser<'a> {
         let debug = if args.len() > 2 { args[2] == "true" } else { false };
 
         Ok(SecondPassParser {
+            resource_budget,
             uniq_prop_names: AHashSet::default(),
             parse_usercmd: contains_usercmd_prop(&first_pass_output.settings.wanted_player_props),
             last_tick: 0,
@@ -220,6 +297,39 @@ impl<'a> SecondPassParser<'a> {
             header: HashMap::default(),
             list_props: first_pass_output.list_props,
         })
+    }
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+
+    #[test]
+    fn aggregate_resource_budget_rejects_rows_and_events_past_limits() {
+        let budget = ParseResourceBudget::with_limits(2, 1);
+
+        assert!(budget.reserve_tick_rows(2).is_ok());
+        assert!(matches!(
+            budget.reserve_tick_rows(1),
+            Err(DemoParserError::ResourceLimitExceeded(_))
+        ));
+        assert!(budget.reserve_game_events(1).is_ok());
+        assert!(matches!(
+            budget.reserve_game_events(1),
+            Err(DemoParserError::ResourceLimitExceeded(_))
+        ));
+    }
+
+    #[test]
+    fn aggregate_resource_budget_is_shared_across_workers() {
+        let budget = Arc::new(ParseResourceBudget::with_limits(1, 1));
+        let other_worker = Arc::clone(&budget);
+
+        assert!(budget.reserve_tick_rows(1).is_ok());
+        assert!(matches!(
+            other_worker.reserve_tick_rows(1),
+            Err(DemoParserError::ResourceLimitExceeded(_))
+        ));
     }
 }
 

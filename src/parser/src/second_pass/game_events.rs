@@ -83,6 +83,23 @@ const ENTITYIDNONE: i32 = 2047;
 const STEAMID64INDIVIDUALIDENTIFIER: u64 = 0x0110000100000000;
 
 impl<'a> SecondPassParser<'a> {
+    fn reserve_game_event(&self) -> Result<(), DemoParserError> {
+        self.resource_budget.reserve_game_events(1)
+    }
+
+    fn push_reserved_game_event(&mut self, event: GameEvent) -> Result<(), DemoParserError> {
+        self.game_events
+            .try_reserve(1)
+            .map_err(|_| DemoParserError::VectorResizeFailure)?;
+        self.game_events.push(event);
+        Ok(())
+    }
+
+    fn push_game_event(&mut self, event: GameEvent) -> Result<(), DemoParserError> {
+        self.reserve_game_event()?;
+        self.push_reserved_game_event(event)
+    }
+
     pub fn parse_event(&mut self, bytes: &[u8]) -> Result<Option<GameEvent>, DemoParserError> {
         if self.wanted_events.len() == 0 && self.wanted_events.first() != Some(&"all".to_string()) {
             return Ok(None);
@@ -127,6 +144,7 @@ impl<'a> SecondPassParser<'a> {
                 name: event_desc.name().to_string(),
                 tick: self.tick,
             };
+            self.reserve_game_event()?;
             return Ok(Some(event));
         } else {
             // Add extra fields
@@ -139,7 +157,7 @@ impl<'a> SecondPassParser<'a> {
                 tick: self.tick,
             };
             self.cleanups(&mut event);
-            self.game_events.push(event);
+            self.push_game_event(event)?;
         }
         Ok(None)
     }
@@ -167,7 +185,7 @@ impl<'a> SecondPassParser<'a> {
                 name: event.name.to_string(),
                 tick: self.tick,
             };
-            self.game_events.push(event);
+            self.push_reserved_game_event(event)?;
         }
         Ok(())
     }
@@ -491,7 +509,7 @@ impl<'a> SecondPassParser<'a> {
                     fields: fields.clone(),
                     tick: self.tick,
                 };
-                self.game_events.push(ge);
+                self.push_game_event(ge)?;
                 self.game_events_counter.insert("server_cvar".to_string());
             }
         }
@@ -540,12 +558,12 @@ impl<'a> SecondPassParser<'a> {
             self.create_custom_event_match_end(&events)?;
         }
         if SecondPassParser::contains_weapon_create(&events) {
-            self.create_custom_event_weapon_purchase(&events);
+            self.create_custom_event_weapon_purchase(&events)?;
         }
         if SecondPassParser::contains_ping_create(&events) {
-            self.create_custom_event_player_ping(&events);
+            self.create_custom_event_player_ping(&events)?;
         }
-        self.create_custom_event_weapon_sold(&events);
+        self.create_custom_event_weapon_sold(&events)?;
         Ok(())
     }
     fn handle_player_connect(&mut self, events: &[GameEventInfo]) -> Result<(), DemoParserError>{
@@ -620,9 +638,10 @@ impl<'a> SecondPassParser<'a> {
     }
 
 
-    fn create_custom_event_weapon_sold(&mut self, events: &[GameEventInfo]) {
+    fn create_custom_event_weapon_sold(&mut self, events: &[GameEventInfo]) -> Result<(), DemoParserError> {
         // This event is always emitted and is always removed in the end.
-        events.iter().for_each(|x| match x {
+        for x in events {
+            match x {
             GameEventInfo::WeaponPurchaseCount((Variant::U32(0), entid, prop_id)) => {
                 if let Ok(player) = self.find_player_metadata(*entid) {
                     let mut fields = vec![];
@@ -671,12 +690,14 @@ impl<'a> SecondPassParser<'a> {
                         fields,
                         tick: self.tick,
                     };
-                    self.game_events.push(ge);
+                    self.push_game_event(ge)?;
                     self.game_events_counter.insert("item_sold".to_string());
                 }
             }
             _ => {}
-        });
+            }
+        }
+        Ok(())
     }
     fn combine_purchase_events(events: &[GameEventInfo]) -> Vec<PurchaseEvent> {
         // Vec<Gameventinfo> --> Vec<(def_idx, weapon_cost)>
@@ -757,10 +778,10 @@ impl<'a> SecondPassParser<'a> {
         }
         purchases
     }
-    fn create_custom_event_weapon_purchase(&mut self, events: &[GameEventInfo]) {
+    fn create_custom_event_weapon_purchase(&mut self, events: &[GameEventInfo]) -> Result<(), DemoParserError> {
         self.game_events_counter.insert("item_purchase".to_string());
         if !self.wanted_events.contains(&"item_purchase".to_string()) && self.wanted_events.first() != Some(&"all".to_string()) {
-            return;
+            return Ok(());
         }
         let purchases = SecondPassParser::combine_purchase_events(events);
 
@@ -839,10 +860,11 @@ impl<'a> SecondPassParser<'a> {
                             fields,
                             tick: self.tick,
                         };
-                        self.game_events.push(ge);
+                        self.push_game_event(ge)?;
                         self.game_events_counter.insert("item_purchase".to_string());
                     }
         }
+        Ok(())
     }
     /// Read one world coordinate of a CPlayerPing entity (cell + offset pair).
     fn ping_coord(&self, entity_id: &i32, cell_id: Option<u32>, vec_id: Option<u32>) -> Option<f32> {
@@ -861,10 +883,10 @@ impl<'a> SecondPassParser<'a> {
     /// Synthesize a "player_ping" event per placed ping wheel marker.
     /// CS2 networks pings as CPlayerPing entities (no game event exists);
     /// creation is detected via the m_hPlayer owner-handle update.
-    fn create_custom_event_player_ping(&mut self, events: &[GameEventInfo]) {
+    fn create_custom_event_player_ping(&mut self, events: &[GameEventInfo]) -> Result<(), DemoParserError> {
         self.game_events_counter.insert("player_ping".to_string());
         if !self.wanted_events.contains(&"player_ping".to_string()) && self.wanted_events.first() != Some(&"all".to_string()) {
-            return;
+            return Ok(());
         }
         let ids = self.prop_controller.special_ids.clone();
         for event in events {
@@ -938,8 +960,9 @@ impl<'a> SecondPassParser<'a> {
                 fields,
                 tick: self.tick,
             };
-            self.game_events.push(ge);
+            self.push_game_event(ge)?;
         }
+        Ok(())
     }
     fn extract_win_reason(&self, events: &[GameEventInfo]) -> Option<Variant> {
         for event in events {
@@ -1011,7 +1034,7 @@ impl<'a> SecondPassParser<'a> {
                 fields,
                 tick: self.tick,
             };
-            self.game_events.push(ge);
+            self.push_game_event(ge)?;
             self.game_events_counter.insert("rank_update".to_string());
         }
 
@@ -1045,7 +1068,7 @@ impl<'a> SecondPassParser<'a> {
             fields,
             tick: self.tick,
         };
-        self.game_events.push(ge);
+        self.push_game_event(ge)?;
 
         Ok(())
     }
@@ -1067,7 +1090,7 @@ impl<'a> SecondPassParser<'a> {
             fields,
             tick: self.tick,
         };
-        self.game_events.push(ge);
+        self.push_game_event(ge)?;
 
         Ok(())
     }
@@ -1117,7 +1140,7 @@ impl<'a> SecondPassParser<'a> {
             fields,
             tick: self.tick,
         };
-        self.game_events.push(ge);
+        self.push_game_event(ge)?;
         Ok(())
     }
     pub fn create_custom_event_server_message(&mut self, msg_bytes: &[u8]) -> Result<(), DemoParserError> {
@@ -1144,7 +1167,7 @@ impl<'a> SecondPassParser<'a> {
             fields,
             tick: self.tick,
         };
-        self.game_events.push(ge);
+        self.push_game_event(ge)?;
         Ok(())
     }
 
@@ -1168,7 +1191,7 @@ impl<'a> SecondPassParser<'a> {
             fields,
             tick: self.tick,
         };
-        self.game_events.push(ge);
+        self.push_game_event(ge)?;
         Ok(())
     }
 
@@ -1254,7 +1277,7 @@ impl<'a> SecondPassParser<'a> {
             tick: self.tick,
         };
 
-        self.game_events.push(ge);
+        self.push_game_event(ge)?;
 
         Ok(())
     }
@@ -1302,7 +1325,7 @@ impl<'a> SecondPassParser<'a> {
             fields,
             tick: self.tick,
         };
-        self.game_events.push(ge);
+        self.push_game_event(ge)?;
     
         Ok(())
     }
@@ -1461,7 +1484,7 @@ impl<'a> SecondPassParser<'a> {
             fields,
             tick: self.tick,
         };
-        self.game_events.push(ge);
+        self.push_game_event(ge)?;
         Ok(())
     }
 
@@ -1518,7 +1541,7 @@ impl<'a> SecondPassParser<'a> {
                 fields,
                 tick: self.tick,
             };
-            self.game_events.push(ge);
+            self.push_game_event(ge)?;
         }
         Ok(())
     }
