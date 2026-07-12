@@ -6,6 +6,7 @@ use crate::first_pass::prop_controller::*;
 use crate::first_pass::read_bits::read_varint;
 use crate::first_pass::read_bits::Bitreader;
 use crate::first_pass::read_bits::DemoParserError;
+use crate::first_pass::read_bits::MAX_DECOMPRESSED_BYTES;
 use crate::first_pass::stringtables::parse_userinfo;
 use crate::maps::demo_cmd_type_from_int;
 use crate::second_pass::collect_data::ProjectileRecord;
@@ -147,15 +148,28 @@ impl<'a> SecondPassParser<'a> {
         })
     }
     fn slice_packet_bytes(&mut self, demo_bytes: &'a [u8], frame_size: usize) -> Result<&'a [u8], DemoParserError> {
-        if self.ptr + frame_size as usize >= demo_bytes.len() {
+        if frame_size > MAX_DECOMPRESSED_BYTES {
+            return Err(DemoParserError::ResourceLimitExceeded(
+                "demo frame exceeds limit",
+            ));
+        }
+        let end = self
+            .ptr
+            .checked_add(frame_size)
+            .ok_or(DemoParserError::MalformedMessage)?;
+        if end > demo_bytes.len() {
             return Err(DemoParserError::MalformedMessage);
         }
-        Ok(&demo_bytes[self.ptr..self.ptr + frame_size])
+        Ok(&demo_bytes[self.ptr..end])
     }
     fn decompress_if_needed<'b>(&mut self, buf: &'b mut Vec<u8>, possibly_uncompressed_bytes: &'b [u8], frame: &Frame) -> Result<&'b [u8], DemoParserError> {
         match frame.is_compressed {
             true => {
-                FirstPassParser::resize_if_needed(buf, decompress_len(possibly_uncompressed_bytes))?;
+                FirstPassParser::resize_if_needed(
+                    buf,
+                    decompress_len(possibly_uncompressed_bytes),
+                    possibly_uncompressed_bytes.len(),
+                )?;
                 match SnapDecoder::new().decompress(possibly_uncompressed_bytes, buf) {
                     Ok(idx) => Ok(&buf[..idx]),
                     Err(e) => return Err(DemoParserError::DecompressionFailure(format!("{}", e))),
@@ -164,18 +178,6 @@ impl<'a> SecondPassParser<'a> {
             false => Ok(possibly_uncompressed_bytes),
         }
     }
-    pub fn resize_if_needed(buf: &mut Vec<u8>, needed_len: Result<usize, snap::Error>) -> Result<(), DemoParserError> {
-        match needed_len {
-            Ok(len) => {
-                if buf.len() < len {
-                    buf.resize(len, 0)
-                }
-            }
-            Err(e) => return Err(DemoParserError::DecompressionFailure(e.to_string())),
-        };
-        Ok(())
-    }
-
     pub fn parse_packet(&mut self, bytes: &[u8], buf: &mut Vec<u8>) -> Result<(), DemoParserError> {
         let msg = match CDemoPacket::decode(bytes) {
             Err(_) => return Err(DemoParserError::MalformedMessage),
@@ -198,7 +200,10 @@ impl<'a> SecondPassParser<'a> {
         while bitreader.bits_remaining().unwrap_or(0) > 8 {
             let msg_type = bitreader.read_u_bit_var()?;
             let size = bitreader.read_varint()?;
+            bitreader.ensure_bytes_remaining(size as usize)?;
             if buf.len() < size as usize {
+                buf.try_reserve_exact(size as usize - buf.len())
+                    .map_err(|_| DemoParserError::VectorResizeFailure)?;
                 buf.resize(size as usize, 0)
             }
             bitreader.read_n_bytes_mut(size as usize, buf)?;

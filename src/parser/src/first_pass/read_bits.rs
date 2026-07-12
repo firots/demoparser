@@ -2,6 +2,37 @@ use bitter::BitReader;
 use bitter::LittleEndianReader;
 use std::fmt;
 
+/// Hard ceiling for any single length-prefixed object copied out of a demo.
+/// Normal Source 2 net messages are far smaller; this prevents malformed
+/// varints from turning a tiny input into a multi-gigabyte allocation.
+pub const MAX_MESSAGE_BYTES: usize = 64 * 1024 * 1024;
+
+/// Hard ceiling for a single Snappy output buffer. The parser reuses this
+/// buffer between frames, so bounding it also bounds peak frame memory.
+pub const MAX_DECOMPRESSED_BYTES: usize = 256 * 1024 * 1024;
+const MAX_COMPRESSION_RATIO: usize = 256;
+const DECOMPRESSION_RATIO_SLACK: usize = 1024 * 1024;
+
+pub fn validate_decompressed_size(
+    compressed_len: usize,
+    decompressed_len: usize,
+) -> Result<(), DemoParserError> {
+    if decompressed_len > MAX_DECOMPRESSED_BYTES {
+        return Err(DemoParserError::ResourceLimitExceeded(
+            "decompressed frame exceeds limit",
+        ));
+    }
+    let ratio_limit = compressed_len
+        .saturating_mul(MAX_COMPRESSION_RATIO)
+        .max(DECOMPRESSION_RATIO_SLACK);
+    if decompressed_len > ratio_limit {
+        return Err(DemoParserError::ResourceLimitExceeded(
+            "decompression ratio exceeds limit",
+        ));
+    }
+    Ok(())
+}
+
 pub struct Bitreader<'a> {
     pub reader: LittleEndianReader<'a>,
     pub bits_left: u32,
@@ -61,6 +92,26 @@ impl<'a> Bitreader<'a> {
     #[inline(always)]
     pub fn bits_remaining(&mut self) -> Option<usize> {
         Some(self.reader.bits_remaining()?)
+    }
+    pub fn ensure_bytes_remaining(&mut self, n: usize) -> Result<(), DemoParserError> {
+        if n > MAX_MESSAGE_BYTES {
+            return Err(DemoParserError::ResourceLimitExceeded(
+                "length-prefixed message exceeds limit",
+            ));
+        }
+        let remaining = self
+            .reader
+            .bits_remaining()
+            .ok_or(DemoParserError::OutOfBitsError)?
+            .checked_div(8)
+            .unwrap_or(0);
+        if n > remaining {
+            return Err(DemoParserError::FailedByteRead(format!(
+                "Failed to read message/command. bytes left in stream: {}, requested bytes: {}",
+                remaining, n,
+            )));
+        }
+        Ok(())
     }
     #[inline(always)]
     pub fn read_nbits(&mut self, n: u32) -> Result<u32, DemoParserError> {
@@ -136,6 +187,7 @@ impl<'a> Bitreader<'a> {
         Ok(self.read_nbits(1)? != 0)
     }
     pub fn read_n_bytes(&mut self, n: usize) -> Result<Vec<u8>, DemoParserError> {
+        self.ensure_bytes_remaining(n)?;
         let mut bytes = vec![0_u8; n];
         match self.reader.read_bytes(&mut bytes) {
             true => {
@@ -153,6 +205,7 @@ impl<'a> Bitreader<'a> {
         }
     }
     pub fn read_n_bytes_mut(&mut self, n: usize, buf: &mut [u8]) -> Result<(), DemoParserError> {
+        self.ensure_bytes_remaining(n)?;
         if buf.len() < n {
             return Err(DemoParserError::MalformedMessage);
         }
@@ -249,6 +302,7 @@ pub enum DemoParserError {
     ImpossibleCmd,
     UnkVoiceFormat,
     MalformedVoicePacket,
+    ResourceLimitExceeded(&'static str),
 }
 
 impl std::error::Error for DemoParserError {}
@@ -256,5 +310,38 @@ impl std::error::Error for DemoParserError {}
 impl fmt::Display for DemoParserError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
+    }
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+
+    #[test]
+    fn length_prefixed_reads_validate_before_allocating() {
+        let mut reader = Bitreader::new(&[0_u8; 4]);
+        assert!(matches!(
+            reader.read_n_bytes(MAX_MESSAGE_BYTES + 1),
+            Err(DemoParserError::ResourceLimitExceeded(_))
+        ));
+
+        let mut reader = Bitreader::new(&[0_u8; 4]);
+        assert!(matches!(
+            reader.read_n_bytes(5),
+            Err(DemoParserError::FailedByteRead(_))
+        ));
+    }
+
+    #[test]
+    fn decompression_limits_reject_bombs() {
+        assert!(validate_decompressed_size(1024, 32 * 1024).is_ok());
+        assert!(matches!(
+            validate_decompressed_size(8, MAX_DECOMPRESSED_BYTES),
+            Err(DemoParserError::ResourceLimitExceeded(_))
+        ));
+        assert!(matches!(
+            validate_decompressed_size(MAX_DECOMPRESSED_BYTES, MAX_DECOMPRESSED_BYTES + 1),
+            Err(DemoParserError::ResourceLimitExceeded(_))
+        ));
     }
 }
