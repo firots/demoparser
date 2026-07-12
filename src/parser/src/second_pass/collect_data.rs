@@ -103,6 +103,7 @@ impl<'a> SecondPassParser<'a> {
                 if self.order_by_steamid {
                     match self.find_prop(prop_info, entity_id, player) {
                         Ok(prop) => {
+                            self.reserve_nested_output(&prop)?;
                             let df_this_player = self.df_per_player.get_mut(&player.steamid.unwrap_or(0)).unwrap();
                             df_this_player.entry(prop_info.id).or_insert_with(|| PropColumn::new()).push(Some(prop.clone()));
                         }
@@ -114,6 +115,7 @@ impl<'a> SecondPassParser<'a> {
                 } else {
                     match self.find_prop(prop_info, entity_id, player) {
                         Ok(prop) => {
+                            self.reserve_nested_output(&prop)?;
                             self.output.entry(prop_info.id).or_insert_with(|| PropColumn::new()).push(Some(prop));
                         }
                         Err(_e) => {
@@ -125,6 +127,16 @@ impl<'a> SecondPassParser<'a> {
             }
         }
         Ok(())
+    }
+
+    fn reserve_nested_output(&self, prop: &Variant) -> Result<(), DemoParserError> {
+        let retained_bytes = prop
+            .retained_column_bytes()
+            .ok_or(DemoParserError::ResourceLimitExceeded(
+                "retained nested tick data size overflow",
+            ))?;
+        self.resource_budget
+            .reserve_retained_nested_bytes(retained_bytes)
     }
 
     pub fn find_prop(&self, prop_info: &PropInfo, entity_id: &i32, player: &PlayerMetaData) -> Result<Variant, PropCollectionError> {

@@ -30,15 +30,18 @@ const DEFAULT_MAX_ENTITY_ID: usize = 1024;
 pub const MAX_TICK_ROWS: usize = 5_000_000;
 pub const MAX_GAME_EVENTS: usize = 500_000;
 pub const MAX_RETAINED_MESSAGE_BYTES: usize = 256 * 1024 * 1024;
+pub const MAX_RETAINED_NESTED_BYTES: usize = 512 * 1024 * 1024;
 
 #[derive(Debug)]
 pub(crate) struct ParseResourceBudget {
     tick_rows: AtomicUsize,
     game_events: AtomicUsize,
     retained_message_bytes: AtomicUsize,
+    retained_nested_bytes: AtomicUsize,
     max_tick_rows: usize,
     max_game_events: usize,
     max_retained_message_bytes: usize,
+    max_retained_nested_bytes: usize,
 }
 
 impl ParseResourceBudget {
@@ -47,6 +50,7 @@ impl ParseResourceBudget {
             MAX_TICK_ROWS,
             MAX_GAME_EVENTS,
             MAX_RETAINED_MESSAGE_BYTES,
+            MAX_RETAINED_NESTED_BYTES,
         )
     }
 
@@ -54,14 +58,17 @@ impl ParseResourceBudget {
         max_tick_rows: usize,
         max_game_events: usize,
         max_retained_message_bytes: usize,
+        max_retained_nested_bytes: usize,
     ) -> Self {
         ParseResourceBudget {
             tick_rows: AtomicUsize::new(0),
             game_events: AtomicUsize::new(0),
             retained_message_bytes: AtomicUsize::new(0),
+            retained_nested_bytes: AtomicUsize::new(0),
             max_tick_rows,
             max_game_events,
             max_retained_message_bytes,
+            max_retained_nested_bytes,
         }
     }
 
@@ -103,6 +110,15 @@ impl ParseResourceBudget {
             amount,
             self.max_retained_message_bytes,
             "retained message data exceeds limit",
+        )
+    }
+
+    pub(crate) fn reserve_retained_nested_bytes(&self, amount: usize) -> Result<(), DemoParserError> {
+        Self::reserve(
+            &self.retained_nested_bytes,
+            amount,
+            self.max_retained_nested_bytes,
+            "retained nested tick data exceeds limit",
         )
     }
 }
@@ -328,7 +344,7 @@ mod security_tests {
 
     #[test]
     fn aggregate_resource_budget_rejects_rows_and_events_past_limits() {
-        let budget = ParseResourceBudget::with_limits(2, 1, 4);
+        let budget = ParseResourceBudget::with_limits(2, 1, 4, 4);
 
         assert!(budget.reserve_tick_rows(2).is_ok());
         assert!(matches!(
@@ -345,11 +361,16 @@ mod security_tests {
             budget.reserve_retained_message_bytes(1),
             Err(DemoParserError::ResourceLimitExceeded(_))
         ));
+        assert!(budget.reserve_retained_nested_bytes(4).is_ok());
+        assert!(matches!(
+            budget.reserve_retained_nested_bytes(1),
+            Err(DemoParserError::ResourceLimitExceeded(_))
+        ));
     }
 
     #[test]
     fn aggregate_resource_budget_is_shared_across_workers() {
-        let budget = Arc::new(ParseResourceBudget::with_limits(1, 1, 1));
+        let budget = Arc::new(ParseResourceBudget::with_limits(1, 1, 1, 1));
         let other_worker = Arc::clone(&budget);
 
         assert!(budget.reserve_tick_rows(1).is_ok());
@@ -360,6 +381,11 @@ mod security_tests {
         assert!(budget.reserve_retained_message_bytes(1).is_ok());
         assert!(matches!(
             other_worker.reserve_retained_message_bytes(1),
+            Err(DemoParserError::ResourceLimitExceeded(_))
+        ));
+        assert!(budget.reserve_retained_nested_bytes(1).is_ok());
+        assert!(matches!(
+            other_worker.reserve_retained_nested_bytes(1),
             Err(DemoParserError::ResourceLimitExceeded(_))
         ));
     }

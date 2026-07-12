@@ -82,11 +82,43 @@ const ENTITYIDNONE: i32 = 2047;
 // https://developer.valvesoftware.com/wiki/SteamID
 const STEAMID64INDIVIDUALIDENTIFIER: u64 = 0x0110000100000000;
 
+fn retained_game_event_nested_bytes(event: &GameEvent) -> Result<usize, DemoParserError> {
+    event.fields.iter().try_fold(
+        event
+            .fields
+            .capacity()
+            .checked_mul(std::mem::size_of::<EventField>())
+            .and_then(|bytes| bytes.checked_add(event.name.capacity()))
+            .ok_or(DemoParserError::ResourceLimitExceeded(
+                "retained game event size overflow",
+            ))?,
+        |total, field| {
+            let variant_bytes = match field.data.as_ref() {
+                Some(value) => value.retained_heap_bytes().ok_or(
+                    DemoParserError::ResourceLimitExceeded(
+                        "retained game event size overflow",
+                    ),
+                )?,
+                None => 0,
+            };
+            total
+                .checked_add(field.name.capacity())
+                .and_then(|bytes| bytes.checked_add(variant_bytes))
+                .ok_or(DemoParserError::ResourceLimitExceeded(
+                    "retained game event size overflow",
+                ))
+        },
+    )
+}
+
 impl<'a> SecondPassParser<'a> {
-    fn reserve_game_event(&self) -> Result<(), DemoParserError> {
+    fn reserve_game_event(&self, event: &GameEvent) -> Result<(), DemoParserError> {
         self.resource_budget.reserve_game_events(1)?;
         self.resource_budget
-            .reserve_retained_message_bytes(std::mem::size_of::<GameEvent>())
+            .reserve_retained_message_bytes(std::mem::size_of::<GameEvent>())?;
+        let retained_nested = retained_game_event_nested_bytes(event)?;
+        self.resource_budget
+            .reserve_retained_nested_bytes(retained_nested)
     }
 
     fn push_reserved_game_event(&mut self, event: GameEvent) -> Result<(), DemoParserError> {
@@ -98,7 +130,7 @@ impl<'a> SecondPassParser<'a> {
     }
 
     fn push_game_event(&mut self, event: GameEvent) -> Result<(), DemoParserError> {
-        self.reserve_game_event()?;
+        self.reserve_game_event(&event)?;
         self.push_reserved_game_event(event)
     }
 
@@ -128,14 +160,15 @@ impl<'a> SecondPassParser<'a> {
         if REMOVEDEVENTS.contains(&event_desc.name()) {
             return Ok(None);
         }
+        if event.keys.len() > event_desc.keys.len() {
+            return Err(DemoParserError::MalformedMessage);
+        }
         self.resource_budget
             .reserve_retained_message_bytes(bytes.len())?;
         let mut event_fields: Vec<EventField> = vec![];
 
         // Parsing game events is this easy, the complexity comes from adding "extra" fields into events.
-        for i in 0..event.keys.len() {
-            let ge = &event.keys[i];
-            let desc = &event_desc.keys[i];
+        for (ge, desc) in event.keys.iter().zip(&event_desc.keys) {
             let val = parse_key(ge);
             event_fields.push(EventField {
                 name: desc.name().to_owned(),
@@ -148,7 +181,7 @@ impl<'a> SecondPassParser<'a> {
                 name: event_desc.name().to_string(),
                 tick: self.tick,
             };
-            self.reserve_game_event()?;
+            self.reserve_game_event(&event)?;
             return Ok(Some(event));
         } else {
             // Add extra fields
@@ -180,15 +213,16 @@ impl<'a> SecondPassParser<'a> {
         }
     }
     pub fn resolve_wrong_order_event(&mut self, events: &mut Vec<GameEvent>) -> Result<(), DemoParserError> {
-        for event in events {
+        for mut event in events.drain(..) {
+            let retained_before_enrichment = retained_game_event_nested_bytes(&event)?;
             event.fields.extend(self.find_extra(&event.fields)?);
             // Remove fields that user does nothing with like userid and user_pawn
             event.fields.retain(|ref x| !INTERNALEVENTFIELDS.contains(&x.name.as_str()));
-            let event = GameEvent {
-                fields: event.fields.clone(),
-                name: event.name.to_string(),
-                tick: self.tick,
-            };
+            event.tick = self.tick;
+            let retained_after_enrichment = retained_game_event_nested_bytes(&event)?;
+            self.resource_budget.reserve_retained_nested_bytes(
+                retained_after_enrichment.saturating_sub(retained_before_enrichment),
+            )?;
             self.push_reserved_game_event(event)?;
         }
         Ok(())

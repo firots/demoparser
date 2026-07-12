@@ -33,6 +33,17 @@ use snap::raw::Decoder as SnapDecoder;
 
 use super::variants::InputHistory;
 
+const MAX_USER_CMD_HISTORY_ENTRIES: usize = 64;
+
+fn validate_user_cmd_history_len(len: usize) -> Result<(), DemoParserError> {
+    if len > MAX_USER_CMD_HISTORY_ENTRIES {
+        return Err(DemoParserError::ResourceLimitExceeded(
+            "user command input history exceeds limit",
+        ));
+    }
+    Ok(())
+}
+
 const OUTER_BUF_DEFAULT_LEN: usize = 400_000;
 const INNER_BUF_DEFAULT_LEN: usize = 8192 * 15;
 
@@ -263,9 +274,13 @@ impl<'a> SecondPassParser<'a> {
             };
 
             if let Some(base) = user_cmd.base {
+                validate_user_cmd_history_len(user_cmd.input_history.len())?;
                 let entity_id = base.pawn_entity_handle() & 0x7FF;
                 if let Some(Some(ent)) = self.entities.get_mut(entity_id as usize) {
-                    let mut history = vec![];
+                    let mut history = Vec::new();
+                    history
+                        .try_reserve_exact(user_cmd.input_history.len())
+                        .map_err(|_| DemoParserError::VectorResizeFailure)?;
                     for input in user_cmd.input_history {
                         // view_angles may be absent on some entries; default the angle to (0, 0, 0)
                         // rather than panicking, matching prost's default accessor behaviour.
@@ -397,5 +412,19 @@ impl<'a> SecondPassParser<'a> {
     pub fn parse_user_command_cmd(&mut self, _data: &[u8]) -> Result<(), DemoParserError> {
         // Only in pov demos. Maybe implement sometime. Includes buttons etc.
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod user_cmd_security_tests {
+    use super::*;
+
+    #[test]
+    fn user_command_history_is_strictly_bounded() {
+        assert!(validate_user_cmd_history_len(MAX_USER_CMD_HISTORY_ENTRIES).is_ok());
+        assert!(matches!(
+            validate_user_cmd_history_len(MAX_USER_CMD_HISTORY_ENTRIES + 1),
+            Err(DemoParserError::ResourceLimitExceeded(_))
+        ));
     }
 }
