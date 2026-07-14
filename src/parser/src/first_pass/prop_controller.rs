@@ -537,19 +537,6 @@ impl PropController {
                 "CCSPlayerController.m_nPawnCharacterDefIndex" => self.special_ids.agent_skin_idx = Some(id),
                 "CCSPlayerPawn.m_bInBuyZone" => self.special_ids.in_buy_zone = Some(id),
                 "CCSPlayerPawn.m_hGroundEntity" => self.special_ids.is_airborn = Some(id),
-                // CPlayerPing entity (in-game ping wheel marker) — drives the
-                // "player_ping" custom event synthesis.
-                "CPlayerPing.m_hPlayer" => self.special_ids.ping_h_player = Some(id),
-                "CPlayerPing.m_hPingedEntity" => self.special_ids.ping_pinged_entity = Some(id),
-                "CPlayerPing.m_iType" => self.special_ids.ping_type = Some(id),
-                "CPlayerPing.m_bUrgent" => self.special_ids.ping_urgent = Some(id),
-                "CPlayerPing.m_szPlaceName" => self.special_ids.ping_place_name = Some(id),
-                "CPlayerPing.CBodyComponentPoint.m_cellX" => self.special_ids.ping_cell_x = Some(id),
-                "CPlayerPing.CBodyComponentPoint.m_cellY" => self.special_ids.ping_cell_y = Some(id),
-                "CPlayerPing.CBodyComponentPoint.m_cellZ" => self.special_ids.ping_cell_z = Some(id),
-                "CPlayerPing.CBodyComponentPoint.m_vecX" => self.special_ids.ping_vec_x = Some(id),
-                "CPlayerPing.CBodyComponentPoint.m_vecY" => self.special_ids.ping_vec_y = Some(id),
-                "CPlayerPing.CBodyComponentPoint.m_vecZ" => self.special_ids.ping_vec_z = Some(id),
                 _ => {}
             };
         }
