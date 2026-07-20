@@ -56,6 +56,7 @@ pub fn _create_ge_tests() {
         "CCSPlayerPawn.m_bResumeZoom".to_string(),
         "CCSPlayerPawn.m_bSpotted".to_string(),
         "CCSPlayerPawn.m_bSpottedByMask".to_string(),
+        "spotted_by_mask_raw".to_string(),
         "CCSPlayerPawn.m_bWaitForNoAttack".to_string(),
         "CCSPlayerPawn.m_fFlags".to_string(),
         "CCSPlayerPawn.m_fMolotovDamageTime".to_string(),
@@ -434,6 +435,7 @@ pub fn _create_tests() {
         "CCSPlayerPawn.m_bResumeZoom".to_string(),
         "CCSPlayerPawn.m_bSpotted".to_string(),
         "CCSPlayerPawn.m_bSpottedByMask".to_string(),
+        "spotted_by_mask_raw".to_string(),
         "CCSPlayerPawn.m_bWaitForNoAttack".to_string(),
         "CCSPlayerPawn.m_fFlags".to_string(),
         "CCSPlayerPawn.m_fMolotovDamageTime".to_string(),
@@ -801,6 +803,7 @@ fn create_data() -> (DemoOutput, PropController, BTreeMap<String, Vec<GameEvent>
         "CCSPlayerPawn.m_bResumeZoom".to_string(),
         "CCSPlayerPawn.m_bSpotted".to_string(),
         "CCSPlayerPawn.m_bSpottedByMask".to_string(),
+        "spotted_by_mask_raw".to_string(),
         "CCSPlayerPawn.m_bWaitForNoAttack".to_string(),
         "CCSPlayerPawn.m_fFlags".to_string(),
         "CCSPlayerPawn.m_fMolotovDamageTime".to_string(),
@@ -3438,6 +3441,38 @@ mod tests {
         );
         let prop_id = out.1.name_to_id[prop.0];
         assert_eq!(out.0.df[&prop_id], prop.1);
+    }
+    #[test]
+    fn spotted_by_mask_raw_preserves_known_empty_and_mask_bits() {
+        let resolved_prop_id = out.1.name_to_id["CCSPlayerPawn.m_bSpottedByMask"];
+        let resolved = match &out.0.df[&resolved_prop_id].data {
+            Some(U64Vec(values)) => values,
+            value => panic!("unexpected resolved spotted-mask column: {value:?}"),
+        };
+        let raw = match &out.0.df[&SPOTTED_BY_MASK_RAW_ID].data {
+            Some(U32(values)) => values,
+            value => panic!("unexpected raw spotted-mask column: {value:?}"),
+        };
+
+        assert_eq!(raw.len(), resolved.len());
+        let mut saw_known_empty = false;
+        let mut saw_nonempty = false;
+        for (raw_mask, resolved_steamids) in raw.iter().zip(resolved) {
+            match raw_mask {
+                Some(0) => {
+                    saw_known_empty = true;
+                    assert!(resolved_steamids.is_empty());
+                }
+                Some(mask) => {
+                    saw_nonempty = true;
+                    assert_eq!(mask.count_ones() as usize, resolved_steamids.len());
+                    assert!(resolved_steamids.iter().all(|steamid| *steamid != 0));
+                }
+                None => {}
+            }
+        }
+        assert!(saw_known_empty);
+        assert!(saw_nonempty);
     }
     #[test]
     fn CBodyComponentBaseAnimGraph_m_nRandomSeedOffset() {

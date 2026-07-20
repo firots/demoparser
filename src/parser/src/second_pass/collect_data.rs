@@ -438,6 +438,7 @@ impl<'a> SecondPassParser<'a> {
             "inventory_as_ids" => self.find_my_inventory_as_ids(entity_id),
             "inventory_as_bitmask" => self.find_my_inventory_as_bitmask(entity_id),
             "CCSPlayerPawn.m_bSpottedByMask" => self.find_spotted(entity_id, prop_info),
+            "spotted_by_mask_raw" => self.find_spotted_raw(entity_id),
             "entity_id" => return Ok(Variant::I32(*entity_id)),
             "is_alive" => return self.find_is_alive(entity_id),
             "user_id" => return self.get_userid(player),
@@ -657,6 +658,19 @@ impl<'a> SecondPassParser<'a> {
             }
             Ok(_) => return Err(PropCollectionError::SpottedIncorrectVariant),
             Err(e) => return Err(e),
+        }
+    }
+    // Scalar companion to approximate_spotted_by. U32 columns preserve a missing
+    // property as None, while the derived U64Vec necessarily represents it as [].
+    pub fn find_spotted_raw(&self, entity_id: &i32) -> Result<Variant, PropCollectionError> {
+        let prop_id = match self.prop_controller.name_to_id.get("CCSPlayerPawn.m_bSpottedByMask") {
+            Some(prop_id) => *prop_id,
+            None => return Err(PropCollectionError::GetPropFromEntPropNotFound),
+        };
+        match self.get_prop_from_ent(&prop_id, entity_id) {
+            Ok(Variant::U32(mask)) => Ok(Variant::U32(mask)),
+            Ok(_) => Err(PropCollectionError::SpottedIncorrectVariant),
+            Err(e) => Err(e),
         }
     }
     fn steamids_from_mask(&self, uid: u32) -> Vec<u64> {
