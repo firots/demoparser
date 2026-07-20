@@ -439,6 +439,7 @@ impl<'a> SecondPassParser<'a> {
             "inventory_as_bitmask" => self.find_my_inventory_as_bitmask(entity_id),
             "CCSPlayerPawn.m_bSpottedByMask" => self.find_spotted(entity_id, prop_info),
             "spotted_by_mask_raw" => self.find_spotted_raw(entity_id),
+            "spotted_by_mask_exact_ids" => self.find_spotted_exact_ids(entity_id),
             "entity_id" => return Ok(Variant::I32(*entity_id)),
             "is_alive" => return self.find_is_alive(entity_id),
             "user_id" => return self.get_userid(player),
@@ -672,6 +673,20 @@ impl<'a> SecondPassParser<'a> {
             Ok(_) => Err(PropCollectionError::SpottedIncorrectVariant),
             Err(e) => Err(e),
         }
+    }
+    // Resolves mask slots only through the controller entities that exist now.
+    // Callers must pair this with spotted_by_mask_raw and reject a nonzero mask
+    // unless popcount(mask) equals the number of unique, nonzero IDs returned.
+    pub fn find_spotted_exact_ids(&self, entity_id: &i32) -> Result<Variant, PropCollectionError> {
+        let mask = match self.find_spotted_raw(entity_id)? {
+            Variant::U32(mask) => mask,
+            _ => return Err(PropCollectionError::SpottedIncorrectVariant),
+        };
+        Ok(Variant::U64Vec(current_controller_steamids_from_mask(
+            mask,
+            self.prop_controller.special_ids.steamid,
+            &self.entities,
+        )))
     }
     fn steamids_from_mask(&self, uid: u32) -> Vec<u64> {
         let mut steamids = vec![];
@@ -1167,6 +1182,38 @@ impl<'a> SecondPassParser<'a> {
     }
 }
 
+fn current_controller_steamids_from_mask(
+    mask: u32,
+    steamid_prop_id: Option<u32>,
+    entities: &[Option<crate::second_pass::entities::Entity>],
+) -> Vec<u64> {
+    let steamid_prop_id = match steamid_prop_id {
+        Some(steamid_prop_id) => steamid_prop_id,
+        None => return vec![],
+    };
+    let mut steamids = vec![];
+    for bit in 0..u32::BITS {
+        if (mask & (1 << bit)) == 0 {
+            continue;
+        }
+        let controller_entity_id = bit as usize + 1;
+        let controller = match entities.get(controller_entity_id) {
+            Some(Some(controller))
+                if controller.entity_id == controller_entity_id as i32
+                    && controller.entity_type == EntityType::PlayerController =>
+            {
+                controller
+            }
+            _ => continue,
+        };
+        match controller.props.get(&steamid_prop_id) {
+            Some(Variant::U64(steamid)) if *steamid != 0 => steamids.push(*steamid),
+            _ => {}
+        }
+    }
+    steamids
+}
+
 fn coord_from_cell(cell: Result<Variant, PropCollectionError>, offset: Result<Variant, PropCollectionError>) -> Result<f32, PropCollectionError> {
     // Both cell and offset are needed for calculation
     match (offset, cell) {
@@ -1250,5 +1297,105 @@ impl std::error::Error for PropCollectionError {}
 impl fmt::Display for PropCollectionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
+    }
+}
+
+#[cfg(test)]
+mod spotted_by_mask_exact_tests {
+    use super::current_controller_steamids_from_mask;
+    use crate::second_pass::entities::Entity;
+    use crate::second_pass::entities::EntityType;
+    use crate::second_pass::variants::Variant;
+    use ahash::AHashMap;
+
+    const STEAMID_PROP_ID: u32 = 77;
+
+    fn controller(entity_id: i32, steamid: Option<Variant>) -> Option<Entity> {
+        let mut props = AHashMap::default();
+        if let Some(steamid) = steamid {
+            props.insert(STEAMID_PROP_ID, steamid);
+        }
+        Some(Entity {
+            cls_id: 0,
+            entity_id,
+            props,
+            entity_type: EntityType::PlayerController,
+        })
+    }
+
+    #[test]
+    fn exact_mask_zero_is_known_empty() {
+        let mut entities = vec![None; 2];
+        entities[1] = controller(1, Some(Variant::U64(111)));
+
+        assert_eq!(
+            current_controller_steamids_from_mask(0, Some(STEAMID_PROP_ID), &entities),
+            vec![]
+        );
+    }
+
+    #[test]
+    fn exact_mask_resolves_current_controller_entities_in_bit_order() {
+        let mut entities = vec![None; 33];
+        entities[1] = controller(1, Some(Variant::U64(111)));
+        entities[3] = controller(3, Some(Variant::U64(333)));
+        entities[32] = controller(32, Some(Variant::U64(3232)));
+        let mask = (1 << 0) | (1 << 2) | (1 << 31);
+
+        assert_eq!(
+            current_controller_steamids_from_mask(mask, Some(STEAMID_PROP_ID), &entities),
+            vec![111, 333, 3232]
+        );
+    }
+
+    #[test]
+    fn exact_mask_delete_and_slot_reuse_rejects_stale_same_cardinality_id() {
+        let mut entities = vec![None; 2];
+        entities[1] = controller(1, Some(Variant::U64(111)));
+        assert_eq!(
+            current_controller_steamids_from_mask(1, Some(STEAMID_PROP_ID), &entities),
+            vec![111]
+        );
+
+        entities[1] = None;
+        let deleted = current_controller_steamids_from_mask(1, Some(STEAMID_PROP_ID), &entities);
+        assert!(deleted.is_empty());
+        assert_ne!(1_u32.count_ones() as usize, deleted.len());
+
+        entities[1] = controller(1, Some(Variant::U64(222)));
+        let reused = current_controller_steamids_from_mask(1, Some(STEAMID_PROP_ID), &entities);
+        assert_eq!(1_u32.count_ones() as usize, reused.len());
+        assert_eq!(reused, vec![222]);
+        assert_ne!(reused, vec![111]);
+    }
+
+    #[test]
+    fn exact_mask_omits_missing_wrong_and_zero_current_mappings() {
+        let mut entities = vec![None; 6];
+        entities[1] = controller(1, Some(Variant::U64(111)));
+        entities[3] = controller(3, None);
+        entities[4] = controller(4, Some(Variant::U32(444)));
+        entities[5] = controller(5, Some(Variant::U64(0)));
+        let mask = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4);
+        let exact = current_controller_steamids_from_mask(mask, Some(STEAMID_PROP_ID), &entities);
+
+        assert_eq!(exact, vec![111]);
+        assert_ne!(mask.count_ones() as usize, exact.len());
+        assert_eq!(
+            current_controller_steamids_from_mask(mask, None, &entities),
+            vec![]
+        );
+    }
+
+    #[test]
+    fn exact_mask_leaves_duplicate_current_ids_detectable() {
+        let mut entities = vec![None; 3];
+        entities[1] = controller(1, Some(Variant::U64(111)));
+        entities[2] = controller(2, Some(Variant::U64(111)));
+
+        assert_eq!(
+            current_controller_steamids_from_mask(0b11, Some(STEAMID_PROP_ID), &entities),
+            vec![111, 111]
+        );
     }
 }

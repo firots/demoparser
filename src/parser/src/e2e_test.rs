@@ -57,6 +57,7 @@ pub fn _create_ge_tests() {
         "CCSPlayerPawn.m_bSpotted".to_string(),
         "CCSPlayerPawn.m_bSpottedByMask".to_string(),
         "spotted_by_mask_raw".to_string(),
+        "spotted_by_mask_exact_ids".to_string(),
         "CCSPlayerPawn.m_bWaitForNoAttack".to_string(),
         "CCSPlayerPawn.m_fFlags".to_string(),
         "CCSPlayerPawn.m_fMolotovDamageTime".to_string(),
@@ -436,6 +437,7 @@ pub fn _create_tests() {
         "CCSPlayerPawn.m_bSpotted".to_string(),
         "CCSPlayerPawn.m_bSpottedByMask".to_string(),
         "spotted_by_mask_raw".to_string(),
+        "spotted_by_mask_exact_ids".to_string(),
         "CCSPlayerPawn.m_bWaitForNoAttack".to_string(),
         "CCSPlayerPawn.m_fFlags".to_string(),
         "CCSPlayerPawn.m_fMolotovDamageTime".to_string(),
@@ -804,6 +806,7 @@ fn create_data() -> (DemoOutput, PropController, BTreeMap<String, Vec<GameEvent>
         "CCSPlayerPawn.m_bSpotted".to_string(),
         "CCSPlayerPawn.m_bSpottedByMask".to_string(),
         "spotted_by_mask_raw".to_string(),
+        "spotted_by_mask_exact_ids".to_string(),
         "CCSPlayerPawn.m_bWaitForNoAttack".to_string(),
         "CCSPlayerPawn.m_fFlags".to_string(),
         "CCSPlayerPawn.m_fMolotovDamageTime".to_string(),
@@ -3473,6 +3476,71 @@ mod tests {
         }
         assert!(saw_known_empty);
         assert!(saw_nonempty);
+    }
+    #[test]
+    fn spotted_by_mask_exact_ids_match_current_controller_rows() {
+        let exact = match &out.0.df[&SPOTTED_BY_MASK_EXACT_IDS_ID].data {
+            Some(U64Vec(values)) => values,
+            value => panic!("unexpected exact spotted-mask column: {value:?}"),
+        };
+        let raw = match &out.0.df[&SPOTTED_BY_MASK_RAW_ID].data {
+            Some(U32(values)) => values,
+            value => panic!("unexpected raw spotted-mask column: {value:?}"),
+        };
+
+        assert_eq!(raw.len(), exact.len());
+        let mut saw_known_empty = false;
+        let mut saw_nonempty = false;
+        for (raw_mask, exact_steamids) in raw.iter().zip(exact) {
+            match raw_mask {
+                Some(0) => {
+                    saw_known_empty = true;
+                    assert!(exact_steamids.is_empty());
+                }
+                Some(mask) => {
+                    saw_nonempty = true;
+                    assert_eq!(mask.count_ones() as usize, exact_steamids.len());
+                    assert!(exact_steamids.iter().all(|steamid| *steamid != 0));
+                }
+                None => {}
+            }
+        }
+        assert!(saw_known_empty);
+        assert!(saw_nonempty);
+    }
+    #[test]
+    fn spotted_by_mask_raw_can_be_selected_without_derived_vectors() {
+        let huf = create_huffman_lookup_table();
+        let settings = ParserInputs {
+            wanted_players: vec![],
+            real_name_to_og_name: AHashMap::default(),
+            wanted_player_props: vec!["spotted_by_mask_raw".to_string()],
+            wanted_events: vec![],
+            wanted_other_props: vec![],
+            parse_ents: true,
+            wanted_ticks: vec![10000],
+            parse_projectiles: false,
+            parse_grenades: false,
+            only_header: false,
+            list_props: false,
+            only_convars: false,
+            huffman_lookup_table: &huf,
+            order_by_steamid: false,
+            wanted_prop_states: AHashMap::default(),
+            fallback_bytes: None,
+        };
+        let mut parser = Parser::new(settings, crate::parse_demo::ParsingMode::ForceSingleThreaded);
+        let file = File::open("test_demo.dem").unwrap();
+        let mmap = unsafe { MmapOptions::new().map(&file).unwrap() };
+        let output = parser.parse_demo(&mmap).unwrap();
+        let approximate_id = output.prop_controller.name_to_id["CCSPlayerPawn.m_bSpottedByMask"];
+
+        assert!(matches!(
+            &output.df[&SPOTTED_BY_MASK_RAW_ID].data,
+            Some(U32(_))
+        ));
+        assert!(!output.df.contains_key(&SPOTTED_BY_MASK_EXACT_IDS_ID));
+        assert!(!output.df.contains_key(&approximate_id));
     }
     #[test]
     fn CBodyComponentBaseAnimGraph_m_nRandomSeedOffset() {

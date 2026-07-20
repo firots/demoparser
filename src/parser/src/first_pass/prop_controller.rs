@@ -94,6 +94,7 @@ pub const GRENADE_Y: u32 = 100100024;
 pub const GRENADE_Z: u32 = 100100025;
 pub const INVENTORY_AS_IDS_BITMASK: u32 = 100100026;
 pub const SPOTTED_BY_MASK_RAW_ID: u32 = 100100027;
+pub const SPOTTED_BY_MASK_EXACT_IDS_ID: u32 = 100100028;
 
 #[derive(Clone, Debug)]
 pub struct PropController {
