@@ -111,8 +111,16 @@ impl<'a> SecondPassParser<'a> {
         events_to_emit: &mut Vec<GameEventInfo>,
         is_fullpacket: bool,
     ) -> Result<(), DemoParserError> {
+        let _pp = crate::second_pass::parser::prof_on().then(std::time::Instant::now);
         let n_updates = self.parse_paths(bitreader)?;
+        if let Some(t) = _pp {
+            crate::second_pass::parser::PROF_PATHS_NS.with(|c| c.set(c.get() + t.elapsed().as_nanos() as u64));
+        }
+        let _pd = crate::second_pass::parser::prof_on().then(std::time::Instant::now);
         let n_updated_values = self.decode_entity_update(bitreader, entity_id, n_updates, is_fullpacket, is_baseline, events_to_emit)?;
+        if let Some(t) = _pd {
+            crate::second_pass::parser::PROF_DECODE_NS.with(|c| c.set(c.get() + t.elapsed().as_nanos() as u64));
+        }
         if n_updated_values > 0 {
             self.gather_extra_info(&entity_id, is_baseline)?;
         }
@@ -201,7 +209,11 @@ impl<'a> SecondPassParser<'a> {
             }
 
             let peeked_bits = bitreader.peek(HUFFMAN_CODE_MAXLEN);
-            let (symbol, code_len) = self.huffman_lookup_table[peeked_bits as usize];
+            // SAFETY: peek(17) yields a value in [0, 2^17-1] (it masks with (1<<17)-1), and the
+            // huffman table is built with exactly 2^17 entries (huf.b = 131071 pairs + 1 sentinel,
+            // see create_huffman_lookup_table). So `peeked_bits` is always a valid index. Eliding
+            // the bounds check removes a per-symbol branch in the hottest decode loop.
+            let (symbol, code_len) = unsafe { *self.huffman_lookup_table.get_unchecked(peeked_bits as usize) };
             bitreader.consume(code_len as u32);
             if symbol == STOP_READING_SYMBOL {
                 break;
@@ -247,7 +259,7 @@ impl<'a> SecondPassParser<'a> {
             }
             // Custom events
             if !is_baseline {
-                events_to_emit.extend(SecondPassParser::listen_for_events(entity, &result, field, field_info, &self.prop_controller, &self.prop_controller.special_ids, is_fullpacket));
+                SecondPassParser::listen_for_events(entity, &result, field, field_info, &self.prop_controller, &self.prop_controller.special_ids, is_fullpacket, events_to_emit);
             }
             // Debug
             if self.is_debug_mode {
@@ -264,7 +276,6 @@ impl<'a> SecondPassParser<'a> {
                     &entity_id,
                 );
             }
-
             SecondPassParser::insert_field(entity, result, field_info);
         }
         Ok(n_updates)
@@ -315,7 +326,12 @@ impl<'a> SecondPassParser<'a> {
         Ok(())
     }
     fn create_new_entity(&mut self, bitreader: &mut Bitreader, entity_id: &i32, _events_to_emit: &mut Vec<GameEventInfo>) -> Result<(), DemoParserError> {
-        let cls_id: u32 = bitreader.read_nbits(8)?;
+        // Class id width is dynamic: ceil(log2(num_classes + 1)). Hardcoded 8 bits
+        // capped at 256 classes and broke on patches with more (14154+), causing
+        // bitstream desync and cascading EntityNotFound errors. cls_by_id.len()
+        // already equals num_classes + 1 (see first_pass::parser::parse_class_info).
+        let cls_bits = (self.cls_by_id.len() as f32).log2().ceil() as u32;
+        let cls_id: u32 = bitreader.read_nbits(cls_bits)?;
         // Both of these are not used. Don't think they are interesting for the parser
         let _serial = bitreader.read_nbits(NSERIALBITS)?;
         let _unknown = bitreader.read_varint();

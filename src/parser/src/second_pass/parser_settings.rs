@@ -5,6 +5,7 @@ use crate::first_pass::read_bits::DemoParserError;
 use crate::first_pass::sendtables::Serializer;
 use crate::first_pass::stringtables::StringTable;
 use crate::first_pass::stringtables::UserInfo;
+use crate::maps::BUTTONMAP;
 use crate::second_pass::collect_data::ProjectileRecord;
 use crate::second_pass::decoder::QfMapper;
 use crate::second_pass::entities::Entity;
@@ -19,6 +20,7 @@ use ahash::AHashSet;
 use ahash::HashMap;
 use ahash::RandomState;
 use csgoproto::csvc_msg_game_event_list::DescriptorT;
+use csgoproto::CsgoUserCmdPb;
 use csgoproto::CsvcMsgVoiceData;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -76,6 +78,7 @@ pub struct SecondPassParser<'a> {
     pub order_by_steamid: bool,
     pub last_tick: i32,
     pub parse_usercmd: bool,
+    pub usercmd_baselines: AHashMap<i32, CsgoUserCmdPb>,
     pub list_props: bool,
 }
 #[derive(Debug, Clone)]
@@ -140,6 +143,15 @@ impl<'a> SecondPassParser<'a> {
             item_drops: self.item_drops,
             header: None,
             player_md: self.player_end_data,
+            roster: self
+                .players
+                .values()
+                .map(|p| PlayerEndMetaData {
+                    steamid: p.steamid,
+                    name: p.name.clone(),
+                    team_number: p.team_num.map(|t| t as i32),
+                })
+                .collect(),
             game_events_counter: self.game_events_counter,
             uniq_prop_names: self.uniq_prop_names,
             prop_info: PropController::new(vec![], vec![], AHashMap::default(), AHashMap::default(), false, &["none".to_string()], false),
@@ -167,6 +179,7 @@ impl<'a> SecondPassParser<'a> {
         Ok(SecondPassParser {
             uniq_prop_names: AHashSet::default(),
             parse_usercmd: contains_usercmd_prop(&first_pass_output.settings.wanted_player_props),
+            usercmd_baselines: AHashMap::default(),
             last_tick: 0,
             start_end_offset: start_end_offset,
             order_by_steamid: first_pass_output.order_by_steamid,
@@ -346,5 +359,5 @@ pub fn create_huffman_lookup_table() -> Vec<(u8, u8)> {
 }
 
 fn contains_usercmd_prop(names: &[String]) -> bool {
-    names.iter().any(|name| name.contains("usercmd"))
+    names.iter().any(|name| name.contains("usercmd") || BUTTONMAP.get(name.as_str()).is_some())
 }
