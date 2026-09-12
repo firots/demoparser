@@ -75,6 +75,17 @@ impl<'a> SecondPassParser<'a> {
         // iterate every player and every wanted prop name
         // if either one is missing then push None to output
         for (entity_id, player) in &self.players {
+            if self.world_actors_enabled() && player.steamid == Some(0) {
+                // Steam-ID grouped output cannot represent multiple bots.
+                // Bots are opt-in, flat actor rows only.
+                if self.order_by_steamid || self.actor_id(player).is_err() {
+                    continue;
+                }
+                let handle = self.controller_value(player, "CCSPlayerController.m_hPlayerPawn");
+                if !matches!(handle, Some(Variant::U32(h)) if self.actor_pawn_from_handle(h) == Some(*entity_id)) {
+                    continue;
+                }
+            }
             // iterate every wanted prop state
             // if any prop's state for this tick is not the wanted state, dont extract info from tick
             for wanted_prop_state_info in &self.prop_controller.wanted_prop_state_infos {
@@ -473,6 +484,11 @@ impl<'a> SecondPassParser<'a> {
     }
     pub fn create_custom_prop(&self, prop_info: &PropInfo, entity_id: &i32, player: &PlayerMetaData) -> Result<Variant, PropCollectionError> {
         match prop_info.id {
+            ACTOR_ID => self.actor_id(player).map(Variant::String),
+            ACTOR_CONTROLLER_STEAMID => self.actor_controller_steamid(*entity_id)
+                .map(Variant::U64).ok_or(PropCollectionError::ControllerEntityIdNotSet),
+            ACTOR_IS_OWN_PAWN => Ok(Variant::Bool(self.actor_is_own_pawn(player))),
+            ACTOR_SPOTTED_BY => self.actor_spotted_by(entity_id),
             PLAYER_X_ID => self.collect_cell_coordinate_player(CoordinateAxis::X, entity_id),
             PLAYER_Y_ID => self.collect_cell_coordinate_player(CoordinateAxis::Y, entity_id),
             PLAYER_Z_ID => self.collect_cell_coordinate_player(CoordinateAxis::Z, entity_id),
@@ -1257,8 +1273,11 @@ impl<'a> SecondPassParser<'a> {
                 _ => None,
             };
             if let Some(e) = player_entid {
-                if e != PLAYER_ENTITY_HANDLE_MISSING && steamid != Some(0) && team_num != Some(SPECTATOR_TEAM_NUM) {
-                    match self.should_remove(steamid) {
+                if e != PLAYER_ENTITY_HANDLE_MISSING && (steamid != Some(0) || self.world_actors_enabled()) && team_num != Some(SPECTATOR_TEAM_NUM) {
+                    match if self.world_actors_enabled() {
+                        self.players.iter().find_map(|(id, p)|
+                            (p.controller_entid == Some(*entity_id)).then_some(*id))
+                    } else { self.should_remove(steamid) } {
                         Some(eid) => {
                             self.players.remove(&eid);
                         }

@@ -80,6 +80,11 @@ pub const USERCMD_BUTTONS_HELD: u32 = 100000043;
 pub const USERCMD_BUTTONS_PRESSED: u32 = 100000044;
 pub const USERCMD_BUTTONS_RELEASED: u32 = 100000045;
 
+pub const ACTOR_ID: u32 = 100000046;
+pub const ACTOR_CONTROLLER_STEAMID: u32 = 100000047;
+pub const ACTOR_IS_OWN_PAWN: u32 = 100000048;
+pub const ACTOR_SPOTTED_BY: u32 = 100000049;
+
 pub const USERCMD_INPUT_HISTORY_BASEID: u32 = 100001000;
 pub const USERCMD_SUBTICK_MOVES_BASEID: u32 = 100001001;
 pub const INPUT_HISTORY_X_OFFSET: u32 = 0;
@@ -102,6 +107,7 @@ pub const INVENTORY_AS_IDS_BITMASK: u32 = 100100026;
 pub struct PropController {
     pub id: u32,
     pub wanted_player_props: Vec<String>,
+    pub world_actors: bool,
     pub wanted_prop_ids: Vec<u32>,
     pub prop_infos: Vec<PropInfo>,
     pub name_to_id: AHashMap<String, u32>,
@@ -151,6 +157,7 @@ impl PropController {
     ) -> Self {
         PropController {
             id: NORMAL_PROP_BASEID,
+            world_actors: wanted_player_props.iter().any(|p| p == "actor_id"),
             wanted_player_props,
             wanted_prop_ids: vec![],
             prop_infos: vec![],

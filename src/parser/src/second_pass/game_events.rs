@@ -198,7 +198,9 @@ impl<'a> SecondPassParser<'a> {
             for player in self.players.values() {
                 if player.steamid == Some(userinfo.steamid) {
                     if let Some(entity_id) = player.player_entity_id {
-                        return Some(entity_id);
+                        return if self.world_actors_enabled() {
+                            self.current_actor_pawn(player)
+                        } else { Some(entity_id) };
                     }
                 }
             }
@@ -245,6 +247,14 @@ impl<'a> SecondPassParser<'a> {
                 let entity_id = match field.name.as_str() {
                     "entityid" => self.grenade_owner_entid_from_grenade(&field.data),
                     "userid_pawn" => self.entity_id_from_user_pawn(u),
+                    _ if self.world_actors_enabled() => {
+                        let pawn_field = format!("{}_pawn", field.name);
+                        match fields.iter().find(|f| f.name == pawn_field).and_then(|f| f.data.as_ref()) {
+                            Some(Variant::I32(handle)) => self.actor_from_event_pawn(*handle as u32, Some(u)),
+                            Some(Variant::U32(handle)) => self.actor_from_event_pawn(*handle, Some(u)),
+                            _ => self.entity_id_from_userid(u),
+                        }
+                    }
                     _ => self.entity_id_from_userid(u),
                 };
                 let entity_id = match entity_id {
@@ -265,7 +275,9 @@ impl<'a> SecondPassParser<'a> {
         Ok(extra_fields)
     }
     pub fn entity_id_from_user_pawn(&self, pawn_handle: i32) -> Option<i32> {
-        Some(pawn_handle & 0x7FF)
+        if self.world_actors_enabled() {
+            self.actor_from_event_pawn(pawn_handle as u32, None)
+        } else { Some(pawn_handle & 0x7FF) }
     }
     pub fn grenade_owner_entid_from_grenade(&self, id_field: &Option<Variant>) -> Option<i32> {
         let prop_id = match self.prop_controller.special_ids.grenade_owner_id {
@@ -450,9 +462,11 @@ impl<'a> SecondPassParser<'a> {
     pub fn player_from_steamid32(&self, steamid32: i32) -> Option<i32> {
         for (_entid, player) in &self.players {
             if let Some(steamid) = player.steamid {
-                if steamid - STEAMID64INDIVIDUALIDENTIFIER == steamid32 as u64 {
+                if steamid.checked_sub(STEAMID64INDIVIDUALIDENTIFIER) == Some(steamid32 as u64) {
                     if let Some(entity_id) = player.player_entity_id {
-                        return Some(entity_id);
+                        return if self.world_actors_enabled() {
+                            self.current_actor_pawn(player)
+                        } else { Some(entity_id) };
                     }
                 }
             }
@@ -542,6 +556,10 @@ impl<'a> SecondPassParser<'a> {
         for event in events{
             if let GameEventInfo::PlayerConnect(id) = event{
                 let entity_id = &(id & 0x7ff);
+                if self.world_actors_enabled() {
+                    self.gather_extra_info(entity_id, false)?;
+                    continue;
+                }
                 let team_num = match self.prop_controller.special_ids.teamnum {
                     Some(team_num_id) => match self.get_prop_from_ent(&team_num_id, entity_id) {
                         Ok(team_num) => match team_num {
@@ -1344,7 +1362,9 @@ impl<'a> SecondPassParser<'a> {
             name: "player_scoped".to_string(),
             data: msg.player_scoped.map(Variant::Bool),
         });
-        let entity_id = (msg.player.unwrap_or(0) & 0x7FF) as i32;
+        let entity_id = if self.world_actors_enabled() {
+            msg.player.and_then(|h| self.actor_pawn_from_handle(h)).unwrap_or(ENTITYIDNONE)
+        } else { (msg.player.unwrap_or(0) & 0x7FF) as i32 };
         fields.push(self.create_player_name_field(entity_id, "user"));
         fields.push(self.create_player_steamid_field(entity_id, "user"));
         fields.extend(self.find_extra_props_events(entity_id, "user"));

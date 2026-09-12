@@ -1,3 +1,4 @@
+mod actors;
 pub mod collect_data;
 pub mod decoder;
 pub mod entities;

@@ -185,6 +185,10 @@ pub static BUTTONMAP: phf::Map<&'static str, u64> = phf_map! {
 };
 
 pub static CUSTOM_PLAYER_PROP_IDS: phf::Map<&'static str, u32> = phf_map! {
+    "actor_id" => ACTOR_ID,
+    "actor_controller_steamid" => ACTOR_CONTROLLER_STEAMID,
+    "actor_is_own_pawn" => ACTOR_IS_OWN_PAWN,
+    "actor_spotted_by" => ACTOR_SPOTTED_BY,
     "entity_id" => ENTITY_ID_ID,
     "user_id"=> USERID_ID,
     "X"=> PLAYER_X_ID,
@@ -910,6 +914,10 @@ pub static FRIENDLY_NAMES_MAPPING: phf::Map<&'static str, &'static str> = phf_ma
     "aim_punch_angle_vel" => "CCSPlayerPawn.m_aimPunchAngleVel",
     "entity_id" => "entity_id",
     "is_alive"=>"is_alive",
+    "actor_id" => "actor_id",
+    "actor_controller_steamid" => "actor_controller_steamid",
+    "actor_is_own_pawn" => "actor_is_own_pawn",
+    "actor_spotted_by" => "actor_spotted_by",
     "agent_skin" => "agent_skin",
     "rank" => "CCSPlayerController.m_iCompetitiveRanking",
     "rank_if_win" => "CCSPlayerController.m_iCompetitiveRankingPredicted_Win",
