@@ -487,7 +487,7 @@ impl<'a> SecondPassParser<'a> {
             ACTOR_ID => self.actor_id(player).map(Variant::String),
             ACTOR_CONTROLLER_STEAMID => self.actor_controller_steamid(*entity_id)
                 .map(Variant::U64).ok_or(PropCollectionError::ControllerEntityIdNotSet),
-            ACTOR_IS_OWN_PAWN => Ok(Variant::Bool(self.actor_is_own_pawn(player))),
+            ACTOR_IS_OWN_PAWN => self.actor_own_pawn_state(player),
             ACTOR_SPOTTED_BY => self.actor_spotted_by(entity_id),
             PLAYER_X_ID => self.collect_cell_coordinate_player(CoordinateAxis::X, entity_id),
             PLAYER_Y_ID => self.collect_cell_coordinate_player(CoordinateAxis::Y, entity_id),

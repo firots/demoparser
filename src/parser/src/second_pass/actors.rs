@@ -39,7 +39,11 @@ impl<'a> SecondPassParser<'a> {
     pub fn actor_from_event_pawn(&self, reference: u32, userid: Option<i32>) -> Option<i32> {
         let slot = (reference & 0x7ff) as i32;
         if let Some(resolved) = userid.and_then(|id| self.entity_id_from_userid(id)) {
-            if resolved == slot { return Some(resolved); }
+            if resolved == slot {
+                return self.players.get(&resolved)
+                    .filter(|p| p.steamid == Some(0) || self.actor_is_own_pawn(p))
+                    .map(|_| resolved);
+            }
             // Lingering inferno damage may have no usable pawn reference after
             // the attacker dies. Preserve the ordinary own-account identity;
             // a takeover still requires the event to identify that bot pawn.
@@ -85,6 +89,27 @@ impl<'a> SecondPassParser<'a> {
         // Also reject a confirmed different actor if a demo lacks the takeover flag.
         !self.current_actor_pawn(player).and_then(|id| self.players.get(&id))
             .is_some_and(|current| current.steamid == Some(0))
+    }
+
+    /// Missing/recycled own-pawn data is unknown, not a bot takeover. Callers
+    /// may exclude that sample without excluding valid own play after reconnect.
+    pub fn actor_own_pawn_state(&self, player: &PlayerMetaData) -> Result<Variant, PropCollectionError> {
+        if player.steamid.unwrap_or(0) == 0
+            || matches!(self.controller_value(player, "CCSPlayerController.m_bControllingBot"), Some(Variant::Bool(true)))
+            || self.current_actor_pawn(player).and_then(|id| self.players.get(&id)).is_some_and(|p| p.steamid == Some(0)) {
+            return Ok(Variant::Bool(false));
+        }
+        if player.steamid.unwrap_or(0) != 0 {
+            let valid = match self.controller_value(player, "CCSPlayerController.m_hPlayerPawn") {
+                Some(Variant::U32(handle)) => self.actor_pawn_from_handle(handle)
+                    .is_some_and(|id| Some(id) == player.player_entity_id),
+                _ => false,
+            };
+            if !valid {
+                return Err(PropCollectionError::ControllerEntityIdNotSet);
+            }
+        }
+        Ok(Variant::Bool(self.actor_is_own_pawn(player)))
     }
 
     pub fn actor_controller_steamid(&self, entity_id: i32) -> Option<u64> {
