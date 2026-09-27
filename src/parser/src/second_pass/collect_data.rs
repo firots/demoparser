@@ -117,6 +117,11 @@ impl<'a> SecondPassParser<'a> {
                         .push(val);
                 }
             }
+            if self.usercmd_provenance.enabled {
+                if let Some(Some(entity)) = self.entities.get_mut(*entity_id as usize) {
+                    super::usercmd_provenance::collected(&mut entity.props);
+                }
+            }
         }
         // After collection, not before: at the time `find_prop` computes velocity
         // the steamid column does not yet contain the current row (len(X) =
@@ -492,6 +497,7 @@ impl<'a> SecondPassParser<'a> {
             INVENTORY_ID => self.find_my_inventory(entity_id),
             INVENTORY_AS_IDS_ID => self.find_my_inventory_as_ids(entity_id),
             INVENTORY_AS_IDS_BITMASK => self.find_my_inventory_as_bitmask(entity_id),
+            INVENTORY_SOURCE_STATUS => Ok(Variant::U32(self.inventory_source_status(*entity_id))),
             ENTITY_ID_ID => Ok(Variant::I32(*entity_id)),
             IS_ALIVE_ID => self.find_is_alive(entity_id),
             USERID_ID => self.get_userid(player),
@@ -499,6 +505,7 @@ impl<'a> SecondPassParser<'a> {
             AGENT_SKIN_ID => self.find_agent_skin(player),
             USERCMD_INPUT_HISTORY_BASEID => self.get_prop_from_ent(&USERCMD_INPUT_HISTORY_BASEID, entity_id),
             USERCMD_SUBTICK_MOVES_BASEID => self.get_prop_from_ent(&USERCMD_SUBTICK_MOVES_BASEID, entity_id),
+            USERCMD_ATTACK1_OBSERVATIONS => self.get_prop_from_ent(&USERCMD_ATTACK1_OBSERVATIONS, entity_id),
             GLOVE_PAINT_ID => self.find_glove_skin_id(entity_id),
             GLOVE_SKIN => self.find_glove_skin(entity_id),
             GLOVE_PAINT_SEED => self.find_glove_paint_seed(entity_id),

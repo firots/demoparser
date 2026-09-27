@@ -9,6 +9,12 @@ use csgoproto::CcsUsrMsgEndOfMatchAllPlayersData;
 use csgoproto::CcsUsrMsgSendPlayerItemDrops;
 use prost::Message;
 
+// Tag 11 became repeated in September 2026. Preserve the old scalar API and
+// protobuf's last-occurrence behavior for older and newer item messages.
+fn legacy_custom_name(item: &csgoproto::CEconItemPreviewDataBlock) -> Option<String> {
+    item.customnames.last().cloned()
+}
+
 #[derive(Debug, Clone)]
 pub struct Class {
     pub class_id: i32,
@@ -42,7 +48,7 @@ impl<'a> SecondPassParser<'a> {
                 paint_wear: item.paintwear,
                 quest_id: item.questid,
                 dropreason: item.dropreason,
-                custom_name: item.customname.clone(),
+                custom_name: legacy_custom_name(item),
                 inventory: item.inventory,
                 ent_idx: item.entindex,
                 steamid: None,
@@ -102,7 +108,7 @@ impl<'a> SecondPassParser<'a> {
                         paint_wear: item.paintwear,
                         quest_id: item.questid,
                         dropreason: item.dropreason,
-                        custom_name: item.customname.clone(),
+                        custom_name: legacy_custom_name(item),
                         inventory: item.inventory,
                         ent_idx: item.entindex,
                         steamid: player.xuid,
@@ -121,5 +127,23 @@ impl<'a> SecondPassParser<'a> {
     pub fn parse_file_info(&mut self, _bytes: &[u8]) -> Result<(), DemoParserError> {
         // let _info: CDemoFileInfo = Message::parse_from_bytes(bytes);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod schema_compatibility_tests {
+    use super::*;
+
+    #[test]
+    fn old_scalar_item_name_wire_values_keep_last_occurrence_semantics() {
+        for (wire, expected) in [
+            (vec![], None),
+            (vec![0x5a, 0], Some("")),
+            (vec![0x5a, 1, b'a'], Some("a")),
+            (vec![0x5a, 1, b'a', 0x5a, 1, b'b'], Some("b")),
+        ] {
+            let item = csgoproto::CEconItemPreviewDataBlock::decode(wire.as_slice()).unwrap();
+            assert_eq!(legacy_custom_name(&item).as_deref(), expected);
+        }
     }
 }

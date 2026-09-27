@@ -1,15 +1,20 @@
-use std::{io::Result, process::Command};
+use std::{io::{Error, ErrorKind, Result}, path::Path};
 
 fn main() -> Result<()> {
+    println!("cargo::rerun-if-changed=src/protobuf.rs");
+    println!("cargo::rerun-if-env-changed=CS2PARSER_REGENERATE_PROTOS");
+    // Use the checked-in bindings unless regeneration is explicitly requested.
+    if std::env::var_os("CS2PARSER_REGENERATE_PROTOS").is_none() {
+        return Ok(());
+    }
     println!("cargo::rerun-if-changed=GameTracking-CS2/Protobufs/demo.proto");
 
-    Command::new("git")
-        .args([
-            "clone",
-            "https://github.com/SteamDatabase/GameTracking-CS2.git",
-            "--depth=1",
-        ])
-        .status()?;
+    // Regeneration must use a deliberately prepared source revision, never a
+    // network checkout that silently follows the latest game update.
+    if !Path::new("GameTracking-CS2/Protobufs/demo.proto").is_file() {
+        return Err(Error::new(ErrorKind::NotFound,
+            "Prepare and record a pinned GameTracking-CS2 checkout before regenerating protobufs"));
+    }
 
     let protos = vec![
         "GameTracking-CS2/Protobufs/steammessages.proto",

@@ -1711,6 +1711,8 @@ pub struct CMsgGccStrike15V2MatchmakingGc2ServerReserve {
     pub teammate_colors: ::prost::alloc::vec::Vec<i32>,
     #[prost(uint32, optional, tag="22")]
     pub match_id_additional: ::core::option::Option<u32>,
+    #[prost(string, repeated, tag="23")]
+    pub clan_tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CMsgGccStrike15V2MatchmakingServerReservationResponse {
@@ -2350,8 +2352,8 @@ pub struct CEconItemPreviewDataBlock {
     pub killeaterscoretype: ::core::option::Option<u32>,
     #[prost(uint32, optional, tag="10")]
     pub killeatervalue: ::core::option::Option<u32>,
-    #[prost(string, optional, tag="11")]
-    pub customname: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, repeated, tag="11")]
+    pub customnames: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(message, repeated, tag="12")]
     pub stickers: ::prost::alloc::vec::Vec<c_econ_item_preview_data_block::Sticker>,
     #[prost(uint32, optional, tag="13")]
@@ -2376,6 +2378,10 @@ pub struct CEconItemPreviewDataBlock {
     pub variations: ::prost::alloc::vec::Vec<c_econ_item_preview_data_block::Sticker>,
     #[prost(uint32, optional, tag="23")]
     pub upgrade_level: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag="24")]
+    pub pet_food_expiration_date: ::core::option::Option<u32>,
+    #[prost(bytes="bytes", optional, tag="25")]
+    pub blobdata: ::core::option::Option<::prost::bytes::Bytes>,
 }
 /// Nested message and enum types in `CEconItemPreviewDataBlock`.
 pub mod c_econ_item_preview_data_block {
@@ -2854,7 +2860,7 @@ pub struct CsoGameAccountSteamChina {
     #[prost(uint32, optional, tag="3")]
     pub time_play_ban: ::core::option::Option<u32>,
 }
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CsoPersonaDataPublic {
     #[prost(int32, optional, tag="1")]
     pub player_level: ::core::option::Option<i32>,
@@ -2868,6 +2874,8 @@ pub struct CsoPersonaDataPublic {
     pub xp_trail_level: ::core::option::Option<u32>,
     #[prost(uint32, optional, tag="6")]
     pub clan_id: ::core::option::Option<u32>,
+    #[prost(string, optional, tag="7")]
+    pub clan_tag: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct CsoAccountRecurringMission {
@@ -4315,6 +4323,10 @@ pub struct CMsgPlayerInfo {
     pub fakeplayer: ::core::option::Option<bool>,
     #[prost(bool, optional, tag="6")]
     pub ishltv: ::core::option::Option<bool>,
+    #[prost(bool, optional, tag="9")]
+    pub clan_member: ::core::option::Option<bool>,
+    #[prost(bool, optional, tag="10")]
+    pub clan_officer: ::core::option::Option<bool>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct CEntityMsg {
@@ -4516,6 +4528,21 @@ pub struct CnetMsgSpawnGroupLoadCompleted {
     pub spawngrouphandle: ::core::option::Option<u32>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct QuantizedFloatEncoderAliasT {
+    #[prost(string, optional, tag="1")]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(int32, optional, tag="2")]
+    pub bit_count: ::core::option::Option<i32>,
+    #[prost(int32, optional, tag="3")]
+    pub encode_flags: ::core::option::Option<i32>,
+    #[prost(float, optional, tag="4")]
+    pub min_value: ::core::option::Option<f32>,
+    #[prost(float, optional, tag="5")]
+    pub max_value: ::core::option::Option<f32>,
+    #[prost(bool, optional, tag="6")]
+    pub validate: ::core::option::Option<bool>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CsvcMsgGameSessionConfiguration {
     #[prost(bool, optional, tag="1")]
     pub is_multiplayer: ::core::option::Option<bool>,
@@ -4555,6 +4582,10 @@ pub struct CsvcMsgGameSessionConfiguration {
     pub previouslevel: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, optional, tag="18")]
     pub landmarkname: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, repeated, tag="20")]
+    pub quantized_float_encoder_aliases: ::prost::alloc::vec::Vec<QuantizedFloatEncoderAliasT>,
+    #[prost(float, optional, tag="21")]
+    pub max_coord: ::core::option::Option<f32>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CnetMsgDebugOverlay {
@@ -5597,9 +5628,9 @@ pub enum ECstrike15UserMessages {
     CsUmGeiger = 302,
     CsUmTrain = 303,
     CsUmHudText = 304,
-    CsUmSayText = 305,
-    CsUmSayText2 = 306,
-    CsUmTextMsg = 307,
+    CsUmSayTextCsgoLegacy = 305,
+    CsUmSayText2CsgoLegacy = 306,
+    CsUmTextMsgCsgoLegacy = 307,
     CsUmHudMsg = 308,
     CsUmResetHud = 309,
     CsUmGameTitle = 310,
@@ -5619,7 +5650,7 @@ pub enum ECstrike15UserMessages {
     CsUmProcessSpottedEntityUpdate = 325,
     CsUmReloadEffect = 326,
     CsUmAdjustMoney = 327,
-    CsUmUpdateTeamMoney = 328,
+    CsUmUpdateTeamMoneyCsgoLegacy = 328,
     CsUmStopSpectatorMode = 329,
     CsUmKillCam = 330,
     CsUmDesiredTimescale = 331,
@@ -5684,9 +5715,9 @@ impl ECstrike15UserMessages {
             Self::CsUmGeiger => "CS_UM_Geiger",
             Self::CsUmTrain => "CS_UM_Train",
             Self::CsUmHudText => "CS_UM_HudText",
-            Self::CsUmSayText => "CS_UM_SayText",
-            Self::CsUmSayText2 => "CS_UM_SayText2",
-            Self::CsUmTextMsg => "CS_UM_TextMsg",
+            Self::CsUmSayTextCsgoLegacy => "CS_UM_SayText_CSGOLegacy",
+            Self::CsUmSayText2CsgoLegacy => "CS_UM_SayText2_CSGOLegacy",
+            Self::CsUmTextMsgCsgoLegacy => "CS_UM_TextMsg_CSGOLegacy",
             Self::CsUmHudMsg => "CS_UM_HudMsg",
             Self::CsUmResetHud => "CS_UM_ResetHud",
             Self::CsUmGameTitle => "CS_UM_GameTitle",
@@ -5706,7 +5737,7 @@ impl ECstrike15UserMessages {
             Self::CsUmProcessSpottedEntityUpdate => "CS_UM_ProcessSpottedEntityUpdate",
             Self::CsUmReloadEffect => "CS_UM_ReloadEffect",
             Self::CsUmAdjustMoney => "CS_UM_AdjustMoney",
-            Self::CsUmUpdateTeamMoney => "CS_UM_UpdateTeamMoney",
+            Self::CsUmUpdateTeamMoneyCsgoLegacy => "CS_UM_UpdateTeamMoney_CSGOLegacy",
             Self::CsUmStopSpectatorMode => "CS_UM_StopSpectatorMode",
             Self::CsUmKillCam => "CS_UM_KillCam",
             Self::CsUmDesiredTimescale => "CS_UM_DesiredTimescale",
@@ -5768,9 +5799,9 @@ impl ECstrike15UserMessages {
             "CS_UM_Geiger" => Some(Self::CsUmGeiger),
             "CS_UM_Train" => Some(Self::CsUmTrain),
             "CS_UM_HudText" => Some(Self::CsUmHudText),
-            "CS_UM_SayText" => Some(Self::CsUmSayText),
-            "CS_UM_SayText2" => Some(Self::CsUmSayText2),
-            "CS_UM_TextMsg" => Some(Self::CsUmTextMsg),
+            "CS_UM_SayText_CSGOLegacy" => Some(Self::CsUmSayTextCsgoLegacy),
+            "CS_UM_SayText2_CSGOLegacy" => Some(Self::CsUmSayText2CsgoLegacy),
+            "CS_UM_TextMsg_CSGOLegacy" => Some(Self::CsUmTextMsgCsgoLegacy),
             "CS_UM_HudMsg" => Some(Self::CsUmHudMsg),
             "CS_UM_ResetHud" => Some(Self::CsUmResetHud),
             "CS_UM_GameTitle" => Some(Self::CsUmGameTitle),
@@ -5790,7 +5821,7 @@ impl ECstrike15UserMessages {
             "CS_UM_ProcessSpottedEntityUpdate" => Some(Self::CsUmProcessSpottedEntityUpdate),
             "CS_UM_ReloadEffect" => Some(Self::CsUmReloadEffect),
             "CS_UM_AdjustMoney" => Some(Self::CsUmAdjustMoney),
-            "CS_UM_UpdateTeamMoney" => Some(Self::CsUmUpdateTeamMoney),
+            "CS_UM_UpdateTeamMoney_CSGOLegacy" => Some(Self::CsUmUpdateTeamMoneyCsgoLegacy),
             "CS_UM_StopSpectatorMode" => Some(Self::CsUmStopSpectatorMode),
             "CS_UM_KillCam" => Some(Self::CsUmKillCam),
             "CS_UM_DesiredTimescale" => Some(Self::CsUmDesiredTimescale),
@@ -5967,6 +5998,8 @@ pub struct CUserMessageSayText {
     pub text: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(bool, optional, tag="3")]
     pub chat: ::core::option::Option<bool>,
+    #[prost(bool, optional, tag="4")]
+    pub textallchat: ::core::option::Option<bool>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CUserMessageSayText2 {
@@ -5984,6 +6017,8 @@ pub struct CUserMessageSayText2 {
     pub param3: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, optional, tag="7")]
     pub param4: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(bool, optional, tag="8")]
+    pub textallchat: ::core::option::Option<bool>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CUserMessageHudMsg {
@@ -7042,6 +7077,90 @@ pub struct CUserMessageUsageReport {
     #[prost(string, optional, tag="1")]
     pub usage: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CUserMessageRemoteServerCommand {
+    #[prost(enumeration="c_user_message_remote_server_command::ECommand", optional, tag="1", default="ChangeConVar")]
+    pub command: ::core::option::Option<i32>,
+    #[prost(string, optional, tag="2")]
+    pub convar: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag="3")]
+    pub value: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Nested message and enum types in `CUserMessage_RemoteServerCommand`.
+pub mod c_user_message_remote_server_command {
+    #[derive(::strum::EnumIter)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[repr(i32)]
+    pub enum ECommand {
+        ChangeConVar = 1,
+    }
+    impl ECommand {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::ChangeConVar => "ECommandChangeConVar",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "ECommandChangeConVar" => Some(Self::ChangeConVar),
+                _ => None,
+            }
+        }
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CUserMessageRemoteServerResponse {
+    #[prost(enumeration="c_user_message_remote_server_response::ECommandResult", optional, tag="1", default="EResultSuccess")]
+    pub command_result: ::core::option::Option<i32>,
+    #[prost(string, optional, tag="2")]
+    pub convar: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag="3")]
+    pub results: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Nested message and enum types in `CUserMessageRemoteServerResponse`.
+pub mod c_user_message_remote_server_response {
+    #[derive(::strum::EnumIter)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[repr(i32)]
+    pub enum ECommandResult {
+        EResultSuccess = 1,
+        EResultServerDoesntAllow = 2,
+        EResultClientNotAuthenticated = 3,
+        EResultClientNotAllowed = 4,
+        EResultCommandNotAllowed = 5,
+    }
+    impl ECommandResult {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::EResultSuccess => "EResultSuccess",
+                Self::EResultServerDoesntAllow => "EResultServerDoesntAllow",
+                Self::EResultClientNotAuthenticated => "EResultClientNotAuthenticated",
+                Self::EResultClientNotAllowed => "EResultClientNotAllowed",
+                Self::EResultCommandNotAllowed => "EResultCommandNotAllowed",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "EResultSuccess" => Some(Self::EResultSuccess),
+                "EResultServerDoesntAllow" => Some(Self::EResultServerDoesntAllow),
+                "EResultClientNotAuthenticated" => Some(Self::EResultClientNotAuthenticated),
+                "EResultClientNotAllowed" => Some(Self::EResultClientNotAllowed),
+                "EResultCommandNotAllowed" => Some(Self::EResultCommandNotAllowed),
+                _ => None,
+            }
+        }
+    }
+}
 #[derive(::strum::EnumIter)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
@@ -7096,6 +7215,8 @@ pub enum EBaseUserMessages {
     UmPlayResponseConditional = 166,
     UmUserSentBugBug = 167,
     UmUsageReport = 168,
+    UmRemoteServerCommand = 169,
+    UmRemoteServerResponse = 170,
     UmMaxBase = 200,
 }
 impl EBaseUserMessages {
@@ -7155,6 +7276,8 @@ impl EBaseUserMessages {
             Self::UmPlayResponseConditional => "UM_PlayResponseConditional",
             Self::UmUserSentBugBug => "UM_UserSentBugBug",
             Self::UmUsageReport => "UM_UsageReport",
+            Self::UmRemoteServerCommand => "UM_RemoteServerCommand",
+            Self::UmRemoteServerResponse => "UM_RemoteServerResponse",
             Self::UmMaxBase => "UM_MAX_BASE",
         }
     }
@@ -7211,6 +7334,8 @@ impl EBaseUserMessages {
             "UM_PlayResponseConditional" => Some(Self::UmPlayResponseConditional),
             "UM_UserSentBugBug" => Some(Self::UmUserSentBugBug),
             "UM_UsageReport" => Some(Self::UmUsageReport),
+            "UM_RemoteServerCommand" => Some(Self::UmRemoteServerCommand),
+            "UM_RemoteServerResponse" => Some(Self::UmRemoteServerResponse),
             "UM_MAX_BASE" => Some(Self::UmMaxBase),
             _ => None,
         }
@@ -7634,6 +7759,30 @@ pub struct CMsgSource2NetworkFlowQuality {
     pub net_ping_p50: ::core::option::Option<u32>,
     #[prost(uint32, optional, tag="82")]
     pub net_ping_p95: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag="90")]
+    pub msgproc_usec_p50: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag="91")]
+    pub msgproc_usec_p95: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag="92")]
+    pub msgproc_usec_p99: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag="93")]
+    pub msgproc_usec_max: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag="94")]
+    pub msgproc_usec_avg_p50: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag="95")]
+    pub msgproc_usec_avg_p95: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag="96")]
+    pub msgproc_usec_avg_p99: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag="97")]
+    pub msgproc_usec_avg_max: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag="100")]
+    pub queuedmsgs_p50: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag="101")]
+    pub queuedmsgs_p95: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag="102")]
+    pub queuedmsgs_p99: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag="103")]
+    pub queuedmsgs_max: ::core::option::Option<u32>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CMsgSource2PerfIntervalSample {
@@ -8391,6 +8540,15 @@ pub struct CsvcMsgVoiceData {
     pub passthrough: ::core::option::Option<i32>,
     #[prost(int32, optional, tag="8", default="-1")]
     pub entity: ::core::option::Option<i32>,
+    #[prost(bool, optional, tag="9")]
+    pub caster: ::core::option::Option<bool>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CsvcMsgEncryptedData {
+    #[prost(bytes="bytes", optional, tag="1")]
+    pub encrypted: ::core::option::Option<::prost::bytes::Bytes>,
+    #[prost(int32, optional, tag="2")]
+    pub key_type: ::core::option::Option<i32>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct CsvcMsgPacketReliable {
@@ -8500,6 +8658,8 @@ pub struct ProtoFlattenedSerializerFieldT {
     pub polymorphic_types: ::prost::alloc::vec::Vec<proto_flattened_serializer_field_t::PolymorphicFieldT>,
     #[prost(int32, optional, tag="12")]
     pub var_serializer_sym: ::core::option::Option<i32>,
+    #[prost(message, optional, tag="13")]
+    pub var_enum_info: ::core::option::Option<proto_flattened_serializer_field_t::ProtoEnumInfoT>,
 }
 /// Nested message and enum types in `ProtoFlattenedSerializerField_t`.
 pub mod proto_flattened_serializer_field_t {
@@ -8509,6 +8669,11 @@ pub mod proto_flattened_serializer_field_t {
         pub polymorphic_field_serializer_name_sym: ::core::option::Option<i32>,
         #[prost(int32, optional, tag="2")]
         pub polymorphic_field_serializer_version: ::core::option::Option<i32>,
+    }
+    #[derive(Clone, Copy, PartialEq, ::prost::Message)]
+    pub struct ProtoEnumInfoT {
+        #[prost(bool, optional, tag="1")]
+        pub is_signed_enum: ::core::option::Option<bool>,
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -8520,6 +8685,21 @@ pub struct ProtoFlattenedSerializerT {
     #[prost(int32, repeated, packed="false", tag="3")]
     pub fields_index: ::prost::alloc::vec::Vec<i32>,
 }
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct ProtoCoordSizeParamsT {
+    #[prost(int32, optional, tag="1")]
+    pub coord_integer_bits: ::core::option::Option<i32>,
+    #[prost(int32, optional, tag="2")]
+    pub coord_fractional_bits: ::core::option::Option<i32>,
+    #[prost(int32, optional, tag="3")]
+    pub coord_integer_bits_mp: ::core::option::Option<i32>,
+    #[prost(int32, optional, tag="4")]
+    pub coord_fractional_bits_mp: ::core::option::Option<i32>,
+    #[prost(int32, optional, tag="5")]
+    pub normal_fractional_bits: ::core::option::Option<i32>,
+    #[prost(int32, optional, tag="6")]
+    pub angle_bits: ::core::option::Option<i32>,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CsvcMsgFlattenedSerializer {
     #[prost(message, repeated, tag="1")]
@@ -8528,6 +8708,8 @@ pub struct CsvcMsgFlattenedSerializer {
     pub symbols: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(message, repeated, tag="3")]
     pub fields: ::prost::alloc::vec::Vec<ProtoFlattenedSerializerFieldT>,
+    #[prost(message, optional, tag="4")]
+    pub coord_size_params: ::core::option::Option<ProtoCoordSizeParamsT>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct CsvcMsgStopSound {
@@ -8750,6 +8932,8 @@ pub struct CMsgServerUserCmd {
     pub client_tick: ::core::option::Option<i32>,
     #[prost(bytes="bytes", optional, tag="6")]
     pub delta_data: ::core::option::Option<::prost::bytes::Bytes>,
+    #[prost(bool, optional, tag="7")]
+    pub delta_processed: ::core::option::Option<bool>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CsvcMsgUserCommands {
@@ -8861,6 +9045,7 @@ pub enum SvcMessages {
     SvcHltvFixupOperatorStatus = 75,
     SvcUserCmds = 76,
     SvcNextMsgPredicted = 77,
+    SvcEncryptedData = 78,
 }
 impl SvcMessages {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -8900,6 +9085,7 @@ impl SvcMessages {
             Self::SvcHltvFixupOperatorStatus => "svc_HltvFixupOperatorStatus",
             Self::SvcUserCmds => "svc_UserCmds",
             Self::SvcNextMsgPredicted => "svc_NextMsgPredicted",
+            Self::SvcEncryptedData => "svc_EncryptedData",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -8936,6 +9122,7 @@ impl SvcMessages {
             "svc_HltvFixupOperatorStatus" => Some(Self::SvcHltvFixupOperatorStatus),
             "svc_UserCmds" => Some(Self::SvcUserCmds),
             "svc_NextMsgPredicted" => Some(Self::SvcNextMsgPredicted),
+            "svc_EncryptedData" => Some(Self::SvcEncryptedData),
             _ => None,
         }
     }

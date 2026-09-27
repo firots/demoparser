@@ -879,6 +879,42 @@ impl DemoParser {
                         df_column_names_py.push(prop_info.prop_friendly_name);
                         all_pyobjects.push(dicts.into_py_any(py)?);
                     }
+                    Some(VarVec::UserCmdAttack1Observations(data)) => {
+                        let mut rows = vec![];
+                        for records in data {
+                            let mut values = vec![];
+                            for record in records {
+                                let dict = PyDict::new(py);
+                                dict.set_item("observed_tick", record.observed_tick)?;
+                                dict.set_item("sequence", record.sequence)?;
+                                dict.set_item("player_slot", record.player_slot)?;
+                                dict.set_item("source_kind", record.source_kind)?;
+                                dict.set_item("pawn_entity_handle", record.pawn_entity_handle)?;
+                                dict.set_item("client_tick", record.client_tick)?;
+                                dict.set_item("legacy_command_number", record.legacy_command_number)?;
+                                dict.set_item("history_index", record.history_index)?;
+                                dict.set_item("history_len", record.history_len)?;
+                                dict.set_item("history_presence", record.history_presence)?;
+                                if let Some(history) = &record.history {
+                                    let entry = PyDict::new(py);
+                                    entry.set_item("x", history.x)?;
+                                    entry.set_item("y", history.y)?;
+                                    entry.set_item("z", history.z)?;
+                                    entry.set_item("render_tick_count", history.render_tick_count)?;
+                                    entry.set_item("render_tick_fraction", history.render_tick_fraction)?;
+                                    entry.set_item("player_tick_count", history.player_tick_count)?;
+                                    entry.set_item("player_tick_fraction", history.player_tick_fraction)?;
+                                    dict.set_item("history", entry)?;
+                                } else {
+                                    dict.set_item("history", py.None())?;
+                                }
+                                values.push(dict);
+                            }
+                            rows.push(values);
+                        }
+                        df_column_names_py.push(prop_info.prop_friendly_name);
+                        all_pyobjects.push(rows.into_py_any(py)?);
+                    }
                     _ => {}
                 }
             }
