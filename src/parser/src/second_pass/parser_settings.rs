@@ -103,6 +103,7 @@ pub struct SecondPassParser<'a> {
     pub order_by_steamid: bool,
     pub last_tick: i32,
     pub parse_usercmd: bool,
+    pub(crate) usercmd_provenance: super::usercmd_provenance::CaptureOptions,
     pub usercmd_baselines: AHashMap<i32, CsgoUserCmdPb>,
     pub list_props: bool,
 }
@@ -205,6 +206,7 @@ impl<'a> SecondPassParser<'a> {
             velocity_history: AHashMap::default(),
             uniq_prop_names: AHashSet::default(),
             parse_usercmd: contains_usercmd_prop(&first_pass_output.settings.wanted_player_props),
+            usercmd_provenance: super::usercmd_provenance::CaptureOptions::new(&first_pass_output.settings.wanted_player_props),
             usercmd_baselines: AHashMap::default(),
             last_tick: 0,
             start_end_offset: start_end_offset,

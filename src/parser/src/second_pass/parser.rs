@@ -324,19 +324,22 @@ impl<'a> SecondPassParser<'a> {
                 continue;
             };
             self.usercmd_baselines.insert(player_slot, next.clone());
-            self.apply_user_cmd(&next);
+            self.apply_user_cmd(&next, cmd.player_slot, u32::from(data.is_some()) | (u32::from(delta_data.is_some()) << 1));
         }
         Ok(())
     }
 
-    fn apply_user_cmd(&mut self, user_cmd: &CsgoUserCmdPb) {
+    fn apply_user_cmd(&mut self, user_cmd: &CsgoUserCmdPb, player_slot: Option<i32>, source_kind: u32) {
         let Some(base) = user_cmd.base.as_ref() else {
             return;
         };
-        let entity_id = base.pawn_entity_handle() & 0x7ff;
-        let Some(Some(ent)) = self.entities.get_mut(entity_id as usize) else {
+        let Some(ent) = super::usercmd_entity::resolve(base.pawn_entity_handle, &mut self.entities, self.cls_by_id) else {
             return;
         };
+
+        if self.usercmd_provenance.enabled {
+            super::usercmd_provenance::capture(&mut ent.props, user_cmd, self.tick, player_slot, source_kind, self.usercmd_provenance);
+        }
 
         let history = user_cmd
             .input_history

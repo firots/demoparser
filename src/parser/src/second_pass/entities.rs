@@ -24,6 +24,7 @@ const HUFFMAN_CODE_MAXLEN: u32 = 17;
 pub struct Entity {
     pub cls_id: u32,
     pub entity_id: i32,
+    pub serial: u32,
     pub props: AHashMap<u32, Variant>,
     pub entity_type: EntityType,
 }
@@ -333,7 +334,7 @@ impl<'a> SecondPassParser<'a> {
         let cls_bits = (self.cls_by_id.len() as f32).log2().ceil() as u32;
         let cls_id: u32 = bitreader.read_nbits(cls_bits)?;
         // Both of these are not used. Don't think they are interesting for the parser
-        let _serial = bitreader.read_nbits(NSERIALBITS)?;
+        let serial = bitreader.read_nbits(NSERIALBITS)?;
         let _unknown = bitreader.read_varint();
         let entity_type = self.check_entity_type(&cls_id)?;
         match entity_type {
@@ -345,6 +346,7 @@ impl<'a> SecondPassParser<'a> {
             _ => {}
         };
         let entity = Entity {
+            serial,
             entity_id: *entity_id,
             cls_id,
             props: AHashMap::with_capacity(0),

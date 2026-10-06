@@ -1,0 +1,99 @@
+{
+  "repository": "SteamDatabase/GameTracking-CS2",
+  "base": "9407c5a695eb3954d0046bb22f011db15edd4e2a",
+  "head": "d45f52d4b0a2c1450bffd5904a7d550be29d3b07",
+  "head_date": "2026-09-23T23:10:20Z",
+  "generator": {
+    "prost-build": "0.13.3",
+    "note": "protobuf bindings regenerated before rebuilding/running the map and message-type generator",
+    "protoc": "34.0"
+  },
+  "inputs": {
+    "Protobufs/steammessages.proto": {
+      "sha256": "0faa45321b905a11b21f6cca970e6d59e1a7a659a62ffc79198031939a4fe6f9",
+      "bytes": 1416
+    },
+    "Protobufs/gcsdk_gcmessages.proto": {
+      "sha256": "b70807c9d7775bebe72cb4388334685095b8fa18f94c05f35324a7f0ff3849ee",
+      "bytes": 8628
+    },
+    "Protobufs/demo.proto": {
+      "sha256": "f646d9a14515ac34bce14d7aa16cba5ec9f8b0e887f4af38b2b2b799cec3e6a8",
+      "bytes": 4186
+    },
+    "Protobufs/cstrike15_gcmessages.proto": {
+      "sha256": "dddfe65bda68906420392de0cfdec405562e5466747a2f5f145b90f920a0f385",
+      "bytes": 47175
+    },
+    "Protobufs/cstrike15_usermessages.proto": {
+      "sha256": "a7b205b9b27595b0fc17383026f82899b7197b132b470ef9ea49f767f91fb4cf",
+      "bytes": 15721
+    },
+    "Protobufs/usermessages.proto": {
+      "sha256": "dd8f2e9a261926e7558aa7dc87f23fc819b05f821f41ac8635438272a35335ad",
+      "bytes": 25706
+    },
+    "Protobufs/networkbasetypes.proto": {
+      "sha256": "5d0df901b7e5b7f5749bd668cd994f8206b35169d672ea286024a655359efeda",
+      "bytes": 6922
+    },
+    "Protobufs/engine_gcmessages.proto": {
+      "sha256": "588ea72aedb68d8738c8f87a832adcc4b40aa5290993d20e80a79e2677b33adf",
+      "bytes": 404
+    },
+    "Protobufs/netmessages.proto": {
+      "sha256": "39f50ae6984aeb0cd4de6e664eb0c43a148f71115a1c43ecd9d9cbefb40c113c",
+      "bytes": 16966
+    },
+    "Protobufs/network_connection.proto": {
+      "sha256": "54338daa8b8bea992570b6317c52d27439d4bbf630cbdc80753fd49227b3c000",
+      "bytes": 13769
+    },
+    "Protobufs/cs_usercmd.proto": {
+      "sha256": "6d155a20ff617c3245d0c990694d934167181a701e4af34583a5ac3500867bde",
+      "bytes": 1731
+    },
+    "Protobufs/usercmd.proto": {
+      "sha256": "e471f17aab4c5df55cb976690696573ba2ec8372616adc9d6a54a9fec6e3e38c",
+      "bytes": 1577
+    },
+    "Protobufs/gameevents.proto": {
+      "sha256": "21bade19ccae97aafb21c3a5615e72ce9506880f935865dc82f9f1ad011728d6",
+      "bytes": 3717
+    },
+    "Protobufs/cs_gameevents.proto": {
+      "sha256": "ba8d01a3db521758cd1bbae403296615b38ef3bc1457990dae9267593a8b01e1",
+      "bytes": 1763
+    },
+    "game/csgo/pak01_dir/scripts/items/items_game.txt": {
+      "sha256": "66c0c5785c1ab4bfa1cb85ffe2fad0cd3c2bf2256865fefad28a5d8ef81e62a1",
+      "bytes": 8117839
+    },
+    "game/csgo/pak01_dir/resource/csgo_english.txt": {
+      "sha256": "8d0969a8ee1a809089d363bc270c660f81b4474a21471e70e1fe58077f720c45",
+      "bytes": 4820781
+    },
+    "Protobufs/valveextensions.proto": {
+      "sha256": "213e87b2fc6fe129765c84392413791d749e6fcf435993d1a45c07ad390eba55",
+      "bytes": 1173
+    },
+    "Protobufs/source2_steam_stats.proto": {
+      "sha256": "5c426d2ca65a1375f0e61056e2b0c3ad9fd5ffb39c7172dbe2da37cc1b8ef9ef",
+      "bytes": 7877
+    }
+  },
+  "generated": {
+    "protobuf.rs": {
+      "sha256_lf": "484061649f3acfd12d365af272484a637f5e8153ffc7b35072bae0f6dafc7762",
+      "changed_from_september7": true
+    },
+    "maps.rs": {
+      "sha256_lf": "846f514c872f6c938ede483025cc094f65a063ca3872f65d230d220277ac8393",
+      "changed_from_september7": false
+    },
+    "message_type.rs": {
+      "sha256_lf": "d2ebd610c43f45ab62911f9e965bf74addb76cb590dde88ccb70acc2c55dda6d",
+      "changed_from_september7": true
+    }
+  }
+}
