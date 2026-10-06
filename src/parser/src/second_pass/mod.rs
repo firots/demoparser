@@ -8,5 +8,6 @@ pub mod parser;
 pub mod parser_settings;
 pub mod path_ops;
 mod usercmd_delta;
+mod usercmd_entity;
 mod usercmd_provenance;
 pub mod variants;

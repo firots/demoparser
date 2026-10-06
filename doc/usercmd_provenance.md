@@ -40,11 +40,12 @@ Masks use the following bits, in order from bit 0:
   analog_left_delta, pitch_delta, yaw_delta.
 
 No command is synthesized when decoding fails, a delta has no baseline, the
-base is absent, or the addressed entity is absent. The observed tick therefore
-remains older (or missing). An absent/invalid pawn handle invalidates the new
-provenance if legacy handling reaches an existing default-index entity. Existing
-legacy handling is preserved. Entity deletion/recreation clears entity-local
-properties and restarts the sequence.
+base is absent, or the addressed pawn cannot be resolved. Resolution requires
+a present, valid handle whose full 14-bit entity index and remaining serial
+match an existing `CCSPlayerPawn`. Missing handles, stale serials and other
+entity classes are ignored without changing properties. The observed tick
+therefore remains older (or missing). Entity deletion/recreation clears
+entity-local properties and restarts the sequence.
 
 The two repeated columns use the existing parser vector representation, which
 uses an empty vector for both a missing row and an empty list. A consumer **must
@@ -109,10 +110,12 @@ mode because delta baselines cross full-packet boundaries. Forcing multithread
 parsing overrides that safeguard and is not supported for complete provenance.
 The parser's existing behavior when only legacy columns are requested is unchanged.
 
-The entity serial read from network creation is currently discarded by the
-parser. The exported command handle therefore cannot be validated against the
-entity's current serial here. Analyzer-side pawn/life/round continuity is still
-required and does not turn this into an ownership fix or a serial-checked source.
+The entity serial from network creation is retained and checked before a
+command is applied. This rejects old commands replayed after an entity slot
+has been reused. A matching pawn can still receive commands while dead, so
+resolution does not impose a life-state requirement. Serial matching does not
+establish which human controlled the pawn or replace consumer-side continuity
+checks.
 
 These fields do not establish physical mouse-click times, server acceptance,
 weapon readiness, an attack-to-shot association, or which human controlled a bot.

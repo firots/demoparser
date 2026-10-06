@@ -333,8 +333,7 @@ impl<'a> SecondPassParser<'a> {
         let Some(base) = user_cmd.base.as_ref() else {
             return;
         };
-        let entity_id = base.pawn_entity_handle() & 0x7ff;
-        let Some(Some(ent)) = self.entities.get_mut(entity_id as usize) else {
+        let Some(ent) = super::usercmd_entity::resolve(base.pawn_entity_handle, &mut self.entities, self.cls_by_id) else {
             return;
         };
 
