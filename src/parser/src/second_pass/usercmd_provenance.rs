@@ -1,6 +1,7 @@
 //! Optional provenance for reconstructed command snapshots, not physical input events.
 //! Presence describes the protobuf after delta reconstruction. Omitted delta fields
 //! may therefore remain present; an explicit clear is present with its default value.
+use crate::entity_handle::entity_handle_index;
 use crate::first_pass::prop_controller::*;
 use crate::second_pass::variants::{InputHistory, UserCmdAttack1Observation, Variant};
 use ahash::AHashMap;
@@ -87,9 +88,8 @@ pub(crate) fn capture(
     options: CaptureOptions,
 ) {
     let Some(base) = command.base.as_ref() else { return; };
-    let Some(handle) = base.pawn_entity_handle.filter(|handle| *handle & 0x7ff != PLAYER_ENTITY_HANDLE_MISSING as u32) else {
-        // Legacy columns can still be overwritten at the default masked entity
-        // index. Do not leave a matching-tick provenance marker for those values.
+    let Some(handle) = base.pawn_entity_handle.filter(|handle| entity_handle_index(*handle) != PLAYER_ENTITY_HANDLE_MISSING) else {
+        // Missing or invalid network handles cannot identify a command source.
         for name in PROPS {
             props.remove(crate::maps::CUSTOM_PLAYER_PROP_IDS.get(name).unwrap());
         }
@@ -234,12 +234,24 @@ mod tests {
     #[test]
     fn absent_or_invalid_pawn_invalidates_provenance() {
         let mut props = AHashMap::default();
-        capture(&mut props, &command(), 51, Some(0), 1);
-        for handle in [None, Some(0x00ff_ffff), Some(u32::MAX), Some(0x8000_07ff)] {
+        for handle in [None, Some(0x00ff_ffff), Some(u32::MAX)] {
+            capture(&mut props, &command(), 51, Some(0), 1);
             let mut invalid = command();
             invalid.base.as_mut().unwrap().pawn_entity_handle = handle;
             capture(&mut props, &invalid, 52, Some(0), 1);
             assert!(!props.contains_key(&USERCMD_OBSERVED_TICK));
+        }
+    }
+
+    #[test]
+    fn valid_network_handle_boundaries_preserve_provenance() {
+        for handle in [0x8000_07ff, (1 << 14) | 2048, (1 << 14) | 0x3fff] {
+            let mut props = AHashMap::default();
+            let mut command = command();
+            command.base.as_mut().unwrap().pawn_entity_handle = Some(handle);
+            capture(&mut props, &command, 51, Some(0), 1);
+            assert_eq!(props[&USERCMD_OBSERVED_TICK], Variant::I32(51));
+            assert_eq!(props[&USERCMD_PAWN_ENTITY_HANDLE], Variant::U32(handle));
         }
     }
 
